@@ -213,6 +213,8 @@ def pickEnv():
             import env_node as env
         case "python":
             import env_python as env
+        case "java":
+            import env_java as env
         case "php":
             import env_php as env
         case default:
@@ -229,6 +231,7 @@ def pickEnv():
         if clean:
             doCleanUp()
         else:
+            doCleanUp()
             startUp()
     else:
         print("Update these values in respective env file!")
@@ -254,11 +257,13 @@ def showHelp():
     print("{:<30} {:<40}".format("","Valid argument with -l are:"))
     print("{:<35} {:<40}".format("","node - to start longevity for Node agent"))
     print("{:<35} {:<40}".format("","python - to start longevity for Python agent"))
+    print("{:<35} {:<40}".format("","java - to start longevity for Java agent"))
     print("{:<35} {:<40}".format("","php - to start longevity for PHP agent\u001b[0m"))
     print("{:<35} {:<40}".format("\033[4;32m-c/--clean <argument>\u001b[0m","\033[1;29mClean longevity setup for specified language"))
     print("{:<30} {:<40}".format("","Valid argument with -c are:"))
     print("{:<35} {:<40}".format("","node - to clean longevity setup for Node agent"))
     print("{:<35} {:<40}".format("","python - to clean longevity setup for Python agent"))
+    print("{:<35} {:<40}".format("","java - to clean longevity setup for Java agent"))
     print("{:<35} {:<40}".format("","php - to clean longevity setup for PHP agent\u001b[0m"))
     print(f"\033[1;34m\nNOTE: keep the K2 agent installer in\u001b[0m \033[3;44m'/root/installer/'\u001b[0m")
 
