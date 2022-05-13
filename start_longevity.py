@@ -184,8 +184,8 @@ def doCleanUp():
     getAndRemoveContainer(env.LOAD_MACHINE, env.WITH_YANDEX_NAME)
     getAndRemoveContainer(env.LOAD_MACHINE, env.WITHOUT_YANDEX_NAME)
     # clean yandex logs
-    doClean(env.WITH_MACHINE,f"rm -rf {env.YANDEX_WITH_DIR}/logs/*")
-    doClean(env.WITHOUT_MACHINE,f"rm -rf {env.YANDEX_WITHOUT_DIR}/logs/*")
+    doClean(env.LOAD_MACHINE,f"rm -rf {env.YANDEX_WITH_DIR}/logs/*")
+    doClean(env.LOAD_MACHINE,f"rm -rf {env.YANDEX_WITHOUT_DIR}/logs/*")
 
 
 def pickEnv():
@@ -219,12 +219,11 @@ def pickEnv():
             showHelp()
             return
             
-    print("\n{:<30} {:<40}".format("Lanaguage collector :: ",lang))
-    print("{:<30} {:<40}".format("Machine with K2 :: ",env.WITH_MACHINE.ip))
-    print("{:<30} {:<40}".format("Machine without K2 :: ",env.WITHOUT_MACHINE.ip))
-    print("{:<30} {:<40}".format("K2 agent install command:: ",env.K2_INSTALL_CMD))
-    print("{:<30} {:<40}".format("App install command (with K2):: ",env.APP_INSTALL_WITH_CMD))
-    print("{:<30} {:<40}".format("App install command:: ",env.APP_INSTALL_WITHOUT_CMD))
+    print("\n{:<40} {:<40}".format("Lanaguage collector :: ",lang))
+    print("{:<40} {:<40}".format("Machine with K2 :: ",env.WITH_MACHINE.ip))
+    print("{:<40} {:<40}".format("Machine without K2 :: ",env.WITHOUT_MACHINE.ip))
+    print("{:<40} {:<40}".format("K2 agent install command:: ",env.K2_INSTALL_CMD))
+    print("{:<40} {:<40}".format("App:: ",env.APP_CONTAINER_NAME))
     answer = input("Continue (y/yes or n/no)?\t\t")
     if answer in ['y', 'yes']:
         if clean:
