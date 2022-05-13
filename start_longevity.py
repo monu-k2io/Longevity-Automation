@@ -184,8 +184,8 @@ def doCleanUp():
     getAndRemoveContainer(env.LOAD_MACHINE, env.WITH_YANDEX_NAME)
     getAndRemoveContainer(env.LOAD_MACHINE, env.WITHOUT_YANDEX_NAME)
     # clean yandex logs
-    doClean(env.WITH_MACHINE,f"rm -rf {env.YANDEX_WITH_DIR}/logs/*")
-    doClean(env.WITHOUT_MACHINE,f"rm -rf {env.YANDEX_WITHOUT_DIR}/logs/*")
+    doClean(env.LOAD_MACHINE,f"rm -rf {env.YANDEX_WITH_DIR}/logs/*")
+    doClean(env.LOAD_MACHINE,f"rm -rf {env.YANDEX_WITHOUT_DIR}/logs/*")
 
 
 def pickEnv():
@@ -213,23 +213,25 @@ def pickEnv():
             import env_node as env
         case "python":
             import env_python as env
+        case "java":
+            import env_java as env
         case "php":
             import env_php as env
         case default:
             showHelp()
             return
             
-    print("\n{:<30} {:<40}".format("Lanaguage collector :: ",lang))
-    print("{:<30} {:<40}".format("Machine with K2 :: ",env.WITH_MACHINE.ip))
-    print("{:<30} {:<40}".format("Machine without K2 :: ",env.WITHOUT_MACHINE.ip))
-    print("{:<30} {:<40}".format("K2 agent install command:: ",env.K2_INSTALL_CMD))
-    print("{:<30} {:<40}".format("App install command (with K2):: ",env.APP_INSTALL_WITH_CMD))
-    print("{:<30} {:<40}".format("App install command:: ",env.APP_INSTALL_WITHOUT_CMD))
+    print("\n{:<40} {:<40}".format("Lanaguage collector :: ",lang))
+    print("{:<40} {:<40}".format("Machine with K2 :: ",env.WITH_MACHINE.ip))
+    print("{:<40} {:<40}".format("Machine without K2 :: ",env.WITHOUT_MACHINE.ip))
+    print("{:<40} {:<40}".format("K2 agent install command:: ",env.K2_INSTALL_CMD))
+    print("{:<40} {:<40}".format("App:: ",env.APP_CONTAINER_NAME))
     answer = input("Continue (y/yes or n/no)?\t\t")
     if answer in ['y', 'yes']:
         if clean:
             doCleanUp()
         else:
+            doCleanUp()
             startUp()
     else:
         print("Update these values in respective env file!")
@@ -249,14 +251,21 @@ def animate():
         time.sleep(0.07)
 
 def showHelp():
-    print(f"Usage: python3 {os.path.basename(__file__)} <OPTIONS>")
-    print("OPTIONS:")
-    print("{:<30} {:<40}".format("-l/--language <argument>","Start longevity for specified language"))
+    print(f"\nUsage: \033[1;33mpython3 {os.path.basename(__file__)} <OPTIONS>\u001b[0m")
+    print("\033[1;34m\nOPTIONS:\u001b[0m")
+    print("{:<35} {:<40}".format("\033[4;32m-l/--language <argument>\u001b[0m","\033[1;29mStart longevity for specified language"))
     print("{:<30} {:<40}".format("","Valid argument with -l are:"))
-    print("{:<30} {:<40}".format("","node - to start longevity for Node agent"))
-    print("{:<30} {:<40}".format("","python - to start longevity for Python agent"))
-    print("{:<30} {:<40}".format("","php - to start longevity for PHP agent"))
-    print(f"\nNOTE: keep the K2 agent installer in '/root/installer/'")
+    print("{:<35} {:<40}".format("","node - to start longevity for Node agent"))
+    print("{:<35} {:<40}".format("","python - to start longevity for Python agent"))
+    print("{:<35} {:<40}".format("","java - to start longevity for Java agent"))
+    print("{:<35} {:<40}".format("","php - to start longevity for PHP agent\u001b[0m"))
+    print("{:<35} {:<40}".format("\033[4;32m-c/--clean <argument>\u001b[0m","\033[1;29mClean longevity setup for specified language"))
+    print("{:<30} {:<40}".format("","Valid argument with -c are:"))
+    print("{:<35} {:<40}".format("","node - to clean longevity setup for Node agent"))
+    print("{:<35} {:<40}".format("","python - to clean longevity setup for Python agent"))
+    print("{:<35} {:<40}".format("","java - to clean longevity setup for Java agent"))
+    print("{:<35} {:<40}".format("","php - to clean longevity setup for PHP agent\u001b[0m"))
+    print(f"\033[1;34m\nNOTE: keep the K2 agent installer in\u001b[0m \033[3;44m'/root/installer/'\u001b[0m")
 
 def startUp():
     print(f"*** Make sure VPN is connected ***")
@@ -272,8 +281,8 @@ def startUp():
     print("Longevity application setup complete!!")
 
     print("Updating load.yaml file...")
-    threadFileWith = threading.Thread(target=updateLoadFile,args=(env.WITH_MACHINE,env.YANDEX_WITH_DIR,"load_with.yaml","temp_with.yaml"))
-    threadFileWithout = threading.Thread(target=updateLoadFile,args=(env.WITHOUT_MACHINE,env.YANDEX_WITHOUT_DIR,"load_without.yaml","temp_without.yaml"))
+    threadFileWith = threading.Thread(target=updateLoadFile,args=(env.WITH_MACHINE,env.YANDEX_WITH_DIR,f"load_with_{lang}.yaml",f"temp_with{lang}.yaml"))
+    threadFileWithout = threading.Thread(target=updateLoadFile,args=(env.WITHOUT_MACHINE,env.YANDEX_WITHOUT_DIR,f"load_without_{lang}.yaml",f"temp_without_{lang}.yaml"))
 
     threadFileWith.start()
     threadFileWithout.start()
