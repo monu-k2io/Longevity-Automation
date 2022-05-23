@@ -3,6 +3,7 @@ import concurrent.futures
 import plot
 import ssh
 
+# PHP
 WITH_MACHINE = ssh.User("192.168.5.132","root","k2cyber")
 WITHOUT_MACHINE = ssh.User("192.168.5.133","root","k2cyber")
 
@@ -32,7 +33,7 @@ def manageCSV(iFile):
                 continue
             tempLine = line.split(" ")
             proc = int(tempLine[0])
-            valInMB = int(tempLine[4])/1024
+            valInMB = int(tempLine[1])/1024
             avgProc += proc
             avgMem += valInMB
             newLine=line.replace("\n","")+" "+str(valInMB)+"\n"

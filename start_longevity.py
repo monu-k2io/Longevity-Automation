@@ -6,6 +6,7 @@ import sys
 import threading
 import time
 import ssh
+import k2_env as K2
 
 def detectContainer(user: ssh.User, containerName):
     endTime = datetime.datetime.now() + datetime.timedelta(minutes=15)
@@ -96,6 +97,19 @@ def startWith(withMachine):
         print(f"Launching instana agent on {withMachine.ip}")
         ssh.doSSH(withMachine,env.INSTANA_CMD)
         if detectContainer(withMachine,env.INSTANA_CONTAINER_NAME):
+
+            if not os.path.exists(K2.DIR):
+                ssh.doSSH(withMachine,f"mkdir {K2.DIR}; ls {K2.DIR}")
+            print(f"Downloading k2 agent on {withMachine.ip}")
+            ssh.doSSH(withMachine,f"cd {K2.DIR}; wget -O vm-all.zip '{K2.K2_CLOUD}/centralmanager/api/{K2.K2_VERSION}/help/installers/{K2.K2_BUILD}/download/{K2.USER_ID}/{K2.REF_TOKEN}/vm-all?isDocker=true&groupName={K2.K2_GROUP_NAME}&agentDeploymentEnvironment={K2.K2_DEPLOYMENT_ENV}&pullPolicyRequired=false'")
+            print("Download complete!\nUnzipping...")
+            ssh.doSSH(withMachine,f"cd {K2.DIR}; unzip vm-all.zip")
+            print("Unzipping complete!\nValidating config...")
+            updateAgentConfig(f".agent.properties.{lang}",f".agent.properties.{lang}.tmp")
+            if K2.VALIDATOR_IP != "":
+                updateEnvConfig(f"env.properties.{lang}",f"env.properties.{lang}.tmp")
+            print("Validated!!")
+
             print(f"Launching k2 agent on {withMachine.ip}")
             ssh.doSSH(withMachine,env.K2_INSTALL_CMD)
             print(f"K2 agent started.\nStarting application with k2 agent on {withMachine.ip}")
@@ -142,6 +156,66 @@ def startRequestFiring(machine,containerName,dir):
         ssh.doSSH(machine,cmd)
         print("Started!")
 
+def updateAgentConfig(fileName, tmpName):
+    out = ssh.doSCP(env.WITH_MACHINE,tmpName,f"{K2.DIR}/k2install/.agent.properties",False)
+    # print(out)
+    
+    if os.path.exists(fileName):
+        os.remove(fileName)
+    with open(tmpName, 'r+') as fp:
+        f = open(fileName, "w")
+        for c, line in enumerate(fp):
+            if "prevent_web_agent_image=" in line and f"{K2.IMAGE}" not in line:
+                print("%s--->Update"%c)
+                line = "prevent_web_agent_image=%s\n"%(K2.IMAGE)
+            if "micro_agent_image=" in line and f"{K2.IMAGE}" not in line:
+                print("%s--->Update"%c)
+                line = "micro_agent_image=%s\n"%(K2.IMAGE)
+            if "prevent_web_agent_image_tag=" in line and f"{K2.VALIDATOR_TAG}" not in line:
+                print("%s--->Update"%c)
+                line = "prevent_web_agent_image_tag=%s\n"%(K2.VALIDATOR_TAG)
+            if "micro_agent_image_tag=" in line and f"{K2.MICROAGENT_TAG}" not in line:
+                print("%s--->Update"%c)
+                line = "micro_agent_image_tag=%s\n"%(K2.MICROAGENT_TAG)
+            f.write(line)
+        
+        if os.path.exists(tmpName):
+            os.remove(tmpName) 
+        f.close()
+    fp.close()
+    
+    out2 = ssh.doSCP(env.WITH_MACHINE,fileName,f"{K2.DIR}/k2install/.agent.properties")
+    # print(out2)
+    if os.path.exists(fileName):
+        os.remove(fileName)
+
+def updateEnvConfig(fileName, tmpName):
+    out = ssh.doSCP(env.WITH_MACHINE,tmpName,f"{K2.DIR}/k2install/env.properties",False)
+    # print(out)
+    
+    if os.path.exists(fileName):
+        os.remove(fileName)
+    with open(tmpName, 'r+') as fp:
+        f = open(fileName, "w")
+        for c, line in enumerate(fp):
+            if "k2_agent_validator_endpoint" in line and f"{K2.VALIDATOR_IP}" not in line:
+                # print("%s--->Update"%c)
+                line = "k2_agent_validator_endpoint=ws://%s:54321\n"%(K2.VALIDATOR_IP)
+            if "k2_agent_resource_endpoint" in line and f"{K2.VALIDATOR_IP}" not in line:
+                # print("%s--->Update"%c)
+                line = "k2_agent_resource_endpoint=http://%s:54322\n"%(K2.VALIDATOR_IP)
+            f.write(line)
+        
+        if os.path.exists(tmpName):
+            os.remove(tmpName) 
+        f.close()
+    fp.close()
+    
+    out2 = ssh.doSCP(env.WITH_MACHINE,fileName,f"{K2.DIR}/k2install/env.properties")
+    # print(out2)
+    if os.path.exists(fileName):
+        os.remove(fileName)
+
 def updateLoadFile(user: ssh.User, dir, fileName, tmpName):
     out = ssh.doSCP(env.LOAD_MACHINE,tmpName,f"{dir}/load.yaml",False)
     # print(out)
@@ -167,7 +241,7 @@ def updateLoadFile(user: ssh.User, dir, fileName, tmpName):
         os.remove(fileName)
 
 def cleanMachine(user: ssh.User):
-    cmd = f"docker rm -f $(docker ps -aq) && rm -rf /opt/k2root"
+    cmd = f"docker rm -f $(docker ps -aq) && rm -rf /opt/k2root && rm -rf {K2.DIR}"
     doClean(user,cmd)
 
 def doClean(user: ssh.User, cmd):
@@ -221,10 +295,15 @@ def pickEnv():
             showHelp()
             return
             
-    print("\n{:<40} {:<40}".format("Lanaguage collector :: ",lang))
+    print("\n{:<40} {:<40}".format("Lanaguage collector :: ",lang.upper()))
     print("{:<40} {:<40}".format("Machine with K2 :: ",env.WITH_MACHINE.ip))
     print("{:<40} {:<40}".format("Machine without K2 :: ",env.WITHOUT_MACHINE.ip))
     print("{:<40} {:<40}".format("K2 agent install command:: ",env.K2_INSTALL_CMD))
+    print("{:<40} {:<40}".format("K2 Cloud:: ",K2.K2_CLOUD))
+    print("{:<40} {:<40}".format("K2 Version:: ",K2.K2_VERSION))
+    print("{:<40} {:<40}".format("Validator IP:: ",f'{K2.VALIDATOR_IP if K2.VALIDATOR_IP!="" else env.WITH_MACHINE.ip} (make sure validator is in running state)'))
+    print("{:<40} {:<40}".format("Validator:: ",K2.VALIDATOR_TAG))
+    print("{:<40} {:<40}".format("Microagent:: ",K2.MICROAGENT_TAG))
     print("{:<40} {:<40}".format("App:: ",env.APP_CONTAINER_NAME))
     answer = input("Continue (y/yes or n/no)?\t\t")
     if answer in ['y', 'yes']:
@@ -265,7 +344,6 @@ def showHelp():
     print("{:<35} {:<40}".format("","python - to clean longevity setup for Python agent"))
     print("{:<35} {:<40}".format("","java - to clean longevity setup for Java agent"))
     print("{:<35} {:<40}".format("","php - to clean longevity setup for PHP agent\u001b[0m"))
-    print(f"\033[1;34m\nNOTE: keep the K2 agent installer in\u001b[0m \033[3;44m'/root/installer/'\u001b[0m")
 
 def startUp():
     print(f"*** Make sure VPN is connected ***")
