@@ -4,12 +4,12 @@ import plot
 import ssh
 
 # PHP
-WITH_MACHINE = ssh.User("192.168.5.132","root","k2cyber")
+WITH_MACHINE = ssh.User("192.168.5.89","root","k2cyber")
 WITHOUT_MACHINE = ssh.User("192.168.5.133","root","k2cyber")
 
 def getContainer(user: ssh.User,oFile):
     print(f"Detecting running syscall_php container at {user.ip}...")
-    cmd = "docker ps -a | grep 'k2-php-vulnerable-perf' | awk '{print $1}'"
+    cmd = "docker ps -a | grep 'k2-php-vulnerable-perf' | cut -b 1-4"
     # print(cmd)
     id=ssh.doSSH(user,cmd)
     id=id.replace("\n","")

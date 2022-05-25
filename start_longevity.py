@@ -16,7 +16,8 @@ def detectContainer(user: ssh.User, containerName):
         if datetime.datetime.now() >= endTime:
             break
         print(f"Detecting running {containerName} container at {user.ip}... ",count)
-        cmd = "docker ps -a | grep '%s' | awk '{print $1}'" % (containerName)
+        # cmd = "docker ps -a | grep '%s' | awk '{print $1}'" % (containerName)
+        cmd = "docker ps -a | grep '%s' | cut -b 1-5" % (containerName)
         id=ssh.doSSH(user,cmd)
         id=id.replace("\n","")
         if id!="" and id!=None:
@@ -45,7 +46,8 @@ def detectContainerFromLogs(user: ssh.User, id, detect_txt):
 
 def getAndRemoveContainer(user: ssh.User,containerName,remove=True):
     print(f"Detecting running {containerName} container at {user.ip}")
-    cmd = "docker ps -a | grep '%s' | awk '{print $1}'" % (containerName)
+    # cmd = "docker ps -a | grep '%s' | awk '{print $1}'" % (containerName)
+    cmd = "docker ps -a | grep '%s' | cut -b 1-5" % (containerName)
     # print(cmd)
     id=""
     id=ssh.doSSH(user,cmd)
@@ -119,7 +121,10 @@ def startWith(withMachine):
                 id=id.replace("\n","")
                 out=re.findall("[^\s]+", id)
                 # print(out)
-                if len(out) == 1 and id!="" and id!=None:
+                if len(out) > 1:
+                    appStatus, id = getAndRemoveContainer(withMachine,env.APP_CONTAINER_NAME,False)
+                    id=id.replace("\n","")
+                if id!="" and id!=None:
                     print("Detected:: ",id)
                     if detectContainerFromLogs(withMachine,id,env.APP_DETECT_TXT):
                         if lang == "php":
@@ -228,6 +233,9 @@ def updateLoadFile(user: ssh.User, dir, fileName, tmpName):
             if "address:" in line and f"{user.ip}:{env.APP_PORT}" not in line:
                 # print("%s--->Update"%c)
                 line = "  address: %s:%s # [Target's address]:[target's port]\n"%(user.ip,env.APP_PORT)
+            if "schedule:" in line and f"{env.LONGEVITY_TIME}" not in line:
+                # print("%s--->Update"%c)
+                line = "    schedule: const(%s) # starting from 1rps growing linearly to 10rps during 10 minutes\n"%(env.LONGEVITY_TIME)
             f.write(line)
         
         if os.path.exists(tmpName):
