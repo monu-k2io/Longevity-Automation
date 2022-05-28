@@ -1,11 +1,7 @@
 import tempfile
 import pexpect
 
-class User:
-  def __init__(self, i, u, p):
-    self.ip = i
-    self.username = u
-    self.password = p
+from models.user import User
 
 def doSSH(user: User, cmd, bg_run=False):                                                                                                 
     """SSH'es to a host using the supplied credentials and executes a command.                                                                                                 
