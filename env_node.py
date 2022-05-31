@@ -2,12 +2,13 @@ import ssh
 import k2_env as K2
 
 # configuration
+LC="node"
 INSTANA_CONTAINER_NAME = "instana/agent"
 INSTANA_CMD = 'docker run --detach --name instana-agent --volume /var/run/docker.sock:/var/run/docker.sock --volume /dev:/dev --volume /sys:/sys --volume /var/log:/var/log --privileged --net=host --pid=host --ipc=host --env="INSTANA_AGENT_KEY=i6anpVVIQPyPvPqdcKxM8w" --env="INSTANA_AGENT_ENDPOINT=saas-us-west-2.instana.io" --env="INSTANA_AGENT_ENDPOINT_PORT=443" instana/agent'
-K2_INSTALL_CMD = f"bash {K2.DIR}/k2install/k2install.sh -i micro-agent"
-APP_INSTALL_WITH_CMD = f"docker run -v /opt/k2root:/opt/k2root:z -e K2_OPTS='--require /opt/k2root/k2root/collectors/k2-njs-agent' -e K2_GROUP_NAME={K2.K2_GROUP_NAME} -itd -p 8080:8080 --name syscall_node k2cyber/test_application:k2-node-vulnerable-per-v16"
-APP_INSTALL_WITHOUT_CMD = 'docker run -itd -p 8080:8080 --name syscall_node k2cyber/test_application:k2-node-vulnerable-per-v16'
+K2_INSTALL_CMD = f"bash {K2.DIR}/k2install/k2install.sh -i prevent-web"
 APP_CONTAINER_NAME = "k2-node-vulnerable-per-v16"
+APP_INSTALL_WITH_CMD = f"docker run -v /opt/k2root:/opt/k2root:z -e K2_OPTS='--require /opt/k2root/k2root/collectors/k2-njs-agent' -e K2_GROUP_NAME={K2.K2_GROUP_NAME} -itd -p 8080:8080 --name {APP_CONTAINER_NAME} k2cyber/test_application:{APP_CONTAINER_NAME}"
+APP_INSTALL_WITHOUT_CMD = f'docker run -itd -p 8080:8080 --name {APP_CONTAINER_NAME} k2cyber/test_application:{APP_CONTAINER_NAME}'
 WITH_YANDEX_NAME = "yandex-node-with"
 WITHOUT_YANDEX_NAME = "yandex-node-without"
 YANDEX_WITH_DIR = "/root/longevity/node/with"

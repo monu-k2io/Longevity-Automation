@@ -1,5 +1,6 @@
 import datetime
 import getopt
+import logging
 import os
 import re
 import sys
@@ -8,272 +9,334 @@ import time
 import ssh
 import k2_env as K2
 
-def detectContainer(user: ssh.User, containerName):
-    endTime = datetime.datetime.now() + datetime.timedelta(minutes=15)
-    count = 1
-    id = ""
-    while True:
-        if datetime.datetime.now() >= endTime:
-            break
-        print(f"Detecting running {containerName} container at {user.ip}... ",count)
+sleep = 10
+interval = 30
+
+def detectContainer(env, user: ssh.User, containerName):
+    try:
+        count = 0
+        id = ""
+        
+        Logger.info(f"Detecting running {containerName} container at {user.ip} at {count*sleep}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
         # cmd = "docker ps -a | grep '%s' | awk '{print $1}'" % (containerName)
         cmd = "docker ps -a | grep '%s' | cut -b 1-5" % (containerName)
         id=ssh.doSSH(user,cmd)
-        id=id.replace("\n","")
+        id=id.replace("\n","").replace("\r","")
         if id!="" and id!=None:
-            print(f"{containerName} started successfully.")
+            Logger.info(f"{containerName} started successfully at {user.ip} after {count*30}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
             return True
+
         count+=1
-    print("No running container found.")
-    return False
-
-def detectContainerFromLogs(user: ssh.User, id, detect_txt):
-    endTime = datetime.datetime.now() + datetime.timedelta(minutes=15)
-    count = 1
-    while True:
-        if datetime.datetime.now() >= endTime:
-            break
-        print(f"Detecting running {id} container at {user.ip}... ",count)
-        cmd = "docker logs '%s'" % (id)
-        out=ssh.doSSH(user,cmd)
-        out=out.replace("\n","")
-        if detect_txt in out:
-            print(f"{id} started successfully.")
-            return True
-        count+=1
-    print("No running container found.")
-    return False
-
-def getAndRemoveContainer(user: ssh.User,containerName,remove=True):
-    print(f"Detecting running {containerName} container at {user.ip}")
-    # cmd = "docker ps -a | grep '%s' | awk '{print $1}'" % (containerName)
-    cmd = "docker ps -a | grep '%s' | cut -b 1-5" % (containerName)
-    # print(cmd)
-    id=""
-    id=ssh.doSSH(user,cmd)
-    id=id.replace("\n","")
-    out=re.findall("[^\s]+", id)
-    if len(out) > 1:
-        return True, None
-
-    if id!="" and id!=None:
-        print("Detected:: ",id)
-        if remove:
-            cmd = f"docker rm -f {id}"
-            out=ssh.doSSH(user,cmd)
-            print(f"Container {containerName} stopped.", out)
-            return True, id
-        else:
-            return False, id
-    else:
-        print(f"No running container found with {containerName}.")
-        return True, None
-
-def attachApplication(user: ssh.User,id):
-    print(f"Started application attachment...")
-    cmd = f"docker exec {id} bash -c 'bash /opt/k2root/k2root/collectors/k2-php-agent/k2_php_agent_install_script.sh --allow-server-restart=TRUE'"
-    # print(cmd)
-    out = ssh.doSSH(user,cmd)
-    out=out.replace("\n","")
-    if "PHP collector for apache server activated" in out:
-        print(f"PHP collector for apache server activated.")
-        return True
-    else:
+        time.sleep(sleep)
+        if count > interval:
+            Logger.warning(f"No running container found at {user.ip} after {count*30}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            return False
+        return detectContainer(env,user,containerName)
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
         return False
 
-def startRSSMonitor(user: ssh.User,id):
-    print(f"Starting RSS monitoring in {id} container at {user.ip}...")
-    cmd = f"docker exec -d {id} bash -c 'cd rss; nohup bash rss.sh &> output & sleep 1'"
-    # print(cmd)
-    ssh.doSSH(user,cmd)
-    print("RSS monitoring Started!")
-    makeRequest(user)
+def detectContainerFromLogs(env,user: ssh.User, id, detect_txt):
+    try:
+        count = 0
+        
+        Logger.info(f"Detecting running container with ID {id} at {user.ip} at {count*sleep}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+        cmd = "docker logs '%s'" % (id)
+        out=ssh.doSSH(user,cmd)
+        out=out.replace("\n","").replace("\r","")
+        if detect_txt in out:
+            Logger.info(f"Container with ID {id} started successfully at {user.ip} after {count*30}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            return True
 
-def makeRequest(user: ssh.User):
-    out=ssh.doSSH(user,env.FIRST_CURL)
-    print("First request fired!")
+        count+=1
+        time.sleep(sleep)
+        if count > interval:
+            Logger.warning(f"No running container found at {user.ip} after {count*30}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            return False
+        return detectContainerFromLogs(env,user,id,detect_txt)
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+        return False
 
-def startWith(withMachine):
-    print(f"\n## WITH AGENT")
-    if getAndRemoveContainer(withMachine,env.INSTANA_CONTAINER_NAME):
-        print(f"Launching instana agent on {withMachine.ip}")
-        ssh.doSSH(withMachine,env.INSTANA_CMD)
-        if detectContainer(withMachine,env.INSTANA_CONTAINER_NAME):
-
-            if not os.path.exists(K2.DIR):
-                ssh.doSSH(withMachine,f"mkdir {K2.DIR}; ls {K2.DIR}")
-            print(f"Downloading k2 agent on {withMachine.ip}")
-            ssh.doSSH(withMachine,f"cd {K2.DIR}; wget -O vm-all.zip '{K2.K2_CLOUD}/centralmanager/api/{K2.K2_VERSION}/help/installers/{K2.K2_BUILD}/download/{K2.USER_ID}/{K2.REF_TOKEN}/vm-all?isDocker=true&groupName={K2.K2_GROUP_NAME}&agentDeploymentEnvironment={K2.K2_DEPLOYMENT_ENV}&pullPolicyRequired=false'")
-            print("Download complete!\nUnzipping...")
-            ssh.doSSH(withMachine,f"cd {K2.DIR}; unzip vm-all.zip")
-            print("Unzipping complete!\nValidating config...")
-            updateAgentConfig(f".agent.properties.{lang}",f".agent.properties.{lang}.tmp")
-            if K2.VALIDATOR_IP != "":
-                updateEnvConfig(f"env.properties.{lang}",f"env.properties.{lang}.tmp")
-            print("Validated!!")
-
-            print(f"Launching k2 agent on {withMachine.ip}")
-            ssh.doSSH(withMachine,env.K2_INSTALL_CMD)
-            print(f"K2 agent started.\nStarting application with k2 agent on {withMachine.ip}")
-            appStatus, appContainerId = getAndRemoveContainer(withMachine,env.APP_CONTAINER_NAME)
-            if appStatus:
-                id=ssh.doSSH(withMachine,env.APP_INSTALL_WITH_CMD)
-                id=id.replace("\n","")
-                out=re.findall("[^\s]+", id)
-                # print(out)
-                if len(out) > 1:
-                    appStatus, id = getAndRemoveContainer(withMachine,env.APP_CONTAINER_NAME,False)
-                    id=id.replace("\n","")
-                if id!="" and id!=None:
-                    print("Detected:: ",id)
-                    if detectContainerFromLogs(withMachine,id,env.APP_DETECT_TXT):
-                        if lang == "php":
-                            if attachApplication(withMachine,id):
-                                startRSSMonitor(withMachine,id)
-                        elif lang == "node" or lang == "python":
-                            makeRequest(withMachine)
-
-def startWithout(withoutMachine):
-    print(f"\n## WITHOUT AGENT")
-    if getAndRemoveContainer(withoutMachine,env.INSTANA_CONTAINER_NAME):
-        print(f"Launching instana agent on {withoutMachine.ip}")
-        ssh.doSSH(withoutMachine,env.INSTANA_CMD)
-        if detectContainer(withoutMachine,env.INSTANA_CONTAINER_NAME):
-            print(f"Starting application without k2 agent on {withoutMachine.ip}")
-            appStatus, appContainerId = getAndRemoveContainer(withoutMachine,env.APP_CONTAINER_NAME)
-            if appStatus:
-                id=ssh.doSSH(withoutMachine,env.APP_INSTALL_WITHOUT_CMD)
-                id=id.replace("\n","")
-                out=re.findall("[^\s]+", id)
-                if len(out) == 1 and id!="" and id!=None:
-                    print("Detected:: ",id)
-                    if detectContainerFromLogs(withoutMachine,id,env.APP_DETECT_TXT):
-                        if lang == "php":
-                            startRSSMonitor(withoutMachine,id)
-                        elif lang == "node" or lang == "python":
-                            makeRequest(withoutMachine)
-
-def startRequestFiring(machine,containerName,dir):
-    if getAndRemoveContainer(machine,containerName):
-        print(f"Starting {containerName} container at {machine.ip}...")
-        cmd = f"cd {dir}; docker run -itd -v $(pwd):/var/loadtest -v $SSH_AUTH_SOCK:/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent --net host --name {containerName} direvius/yandex-tank"
+def getAndRemoveContainer(env, user: ssh.User,containerName,remove=True):
+    try:
+        Logger.info(f"Checking for running {containerName} container at {user.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+        # cmd = "docker ps -a | grep '%s' | awk '{print $1}'" % (containerName)
+        cmd = "docker ps -a | grep '\<%s\>' | cut -b 1-5" % (containerName)
         # print(cmd)
-        ssh.doSSH(machine,cmd)
-        print("Started!")
+        id=""
+        id=ssh.doSSH(user,cmd)
+        id=id.replace("\n","").replace("\r","")
+        out=re.findall("[^\s]+", id)
+        if len(out) > 1:
+            return True, None
 
-def updateAgentConfig(fileName, tmpName):
-    out = ssh.doSCP(env.WITH_MACHINE,tmpName,f"{K2.DIR}/k2install/.agent.properties",False)
-    # print(out)
-    
-    if os.path.exists(fileName):
-        os.remove(fileName)
-    with open(tmpName, 'r+') as fp:
-        f = open(fileName, "w")
-        for c, line in enumerate(fp):
-            if "prevent_web_agent_image=" in line and f"{K2.IMAGE}" not in line:
-                print("%s--->Update"%c)
-                line = "prevent_web_agent_image=%s\n"%(K2.IMAGE)
-            if "micro_agent_image=" in line and f"{K2.IMAGE}" not in line:
-                print("%s--->Update"%c)
-                line = "micro_agent_image=%s\n"%(K2.IMAGE)
-            if "prevent_web_agent_image_tag=" in line and f"{K2.VALIDATOR_TAG}" not in line:
-                print("%s--->Update"%c)
-                line = "prevent_web_agent_image_tag=%s\n"%(K2.VALIDATOR_TAG)
-            if "micro_agent_image_tag=" in line and f"{K2.MICROAGENT_TAG}" not in line:
-                print("%s--->Update"%c)
-                line = "micro_agent_image_tag=%s\n"%(K2.MICROAGENT_TAG)
-            f.write(line)
+        if id!="" and id!=None:
+            Logger.info("Detected:: %s"%(id),extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            if remove:
+                cmd = "docker rm -f %s" % (id)
+                out=ssh.doSSH(user,cmd)
+                Logger.info(f"Container {containerName} stopped.",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                return True, id
+            else:
+                return False, id
+        else:
+            Logger.warning(f"No running container found with {containerName}.",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            return True, None
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+        return False, None
+
+def attachApplication(env,user: ssh.User,id):
+    try:
+        Logger.info(f"Started application attachment...",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+        cmd = f"docker exec {id} bash -c 'bash /opt/k2root/k2root/collectors/k2-php-agent/k2_php_agent_install_script.sh --allow-server-restart=TRUE'"
+        # print(cmd)
+        out = ssh.doSSH(user,cmd)
+        out=out.replace("\n","").replace("\r","")
+        if "PHP collector for apache server activated" in out:
+            Logger.info(f"PHP collector for apache server activated.",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            return True
+        else:
+            Logger.error(f"PHP agent attachment failled!",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            return False
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+        return False
+
+def startRSSMonitor(env,user: ssh.User,id):
+    try:
+        Logger.info(f"Starting RSS monitoring in {id} container at {user.ip}...",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+        cmd = f"docker exec -d {id} bash -c 'cd rss; nohup bash rss.sh &> output & sleep 1'"
+        # print(cmd)
+        ssh.doSSH(user,cmd)
+        Logger.info("RSS monitoring Started!",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+        makeRequest(env,user)
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+
+def makeRequest(env,user: ssh.User):
+    try:
+        out=ssh.doSSH(user,env.FIRST_CURL)
+        Logger.info("First request fired!",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+
+def startWith(env,withMachine):
+    try:
+        if getAndRemoveContainer(env,withMachine,env.INSTANA_CONTAINER_NAME):
+            Logger.info(f"Launching instana agent on {withMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            ssh.doSSH(withMachine,env.INSTANA_CMD)
+            if detectContainer(env,withMachine,env.INSTANA_CONTAINER_NAME):
+                ssh.doSSH(withMachine,f"rm -rfR {K2.DIR}; mkdir {K2.DIR}; ls {K2.DIR}")
+                Logger.info(f"Downloading k2 agent on {withMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                ssh.doSSH(withMachine,f"cd {K2.DIR}; wget -O vm-all.zip '{K2.K2_CLOUD}/centralmanager/api/{K2.K2_VERSION}/help/installers/{K2.K2_BUILD}/download/{K2.USER_ID}/{K2.REF_TOKEN}/vm-all?isDocker=true&groupName={K2.K2_GROUP_NAME}&agentDeploymentEnvironment={K2.K2_DEPLOYMENT_ENV}&pullPolicyRequired=false'")
+                Logger.info("Download complete!\nUnzipping...",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                ssh.doSSH(withMachine,f"cd {K2.DIR}; unzip vm-all.zip")
+                Logger.info("Unzipping complete!\nValidating config...",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                updateAgentConfig(env,f".agent.properties.{env.LC}",f".agent.properties.{env.LC}.tmp")
+                if K2.VALIDATOR_IP != "":
+                    updateEnvConfig(env,f"env.properties.{env.LC}",f"env.properties.{env.LC}.tmp")
+                Logger.info("Validated!!",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+
+                Logger.info(f"Launching k2 agent on {withMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                ssh.doSSH(withMachine,env.K2_INSTALL_CMD)
+                Logger.info(f"K2 agent started.\nStarting application with k2 agent on {withMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                time.sleep(30)
+                appStatus, appContainerId = getAndRemoveContainer(env,withMachine,env.APP_CONTAINER_NAME)
+                if appStatus:
+                    id=ssh.doSSH(withMachine,env.APP_INSTALL_WITH_CMD)
+                    id=id.replace("\n","").replace("\r","")
+                    out=re.findall("[^\s]+", id)
+                    # print(out)
+                    # if len(out) > 1:
+                    #     endTime = datetime.datetime.now() + datetime.timedelta(minutes=5)
+                    #     while True:
+                    #         if datetime.datetime.now() >= endTime:
+                    #             break
+                    #         appStatus, id = getAndRemoveContainer(env,withMachine,env.APP_CONTAINER_NAME,False)
+                    #         # print(id)
+                    #         if id!=None:
+                    #             id=id.replace("\n","").replace("\r","")
+                    #             break
+                    if len(out) > 1:
+                        appStatus, id = getAndRemoveContainer(env,withMachine,env.APP_CONTAINER_NAME,False)
+                        if id!=None:
+                            id=id.replace("\n","").replace("\r","")
+                    if id!="" and id!=None:
+                        Logger.info("Detected:: %s"%(id),extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                        if detectContainerFromLogs(env,withMachine,id,env.APP_DETECT_TXT):
+                            if env.LC == "php":
+                                if attachApplication(env,withMachine,id):
+                                    startRSSMonitor(env,withMachine,id)
+                                else:
+                                    Logger.error("Agent attachment failed!",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                            else:
+                                makeRequest(env,withMachine)
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+
+def startWithout(env,withoutMachine):
+    try:
+        if getAndRemoveContainer(env,withoutMachine,env.INSTANA_CONTAINER_NAME):
+            Logger.info(f"Launching instana agent on {withoutMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            ssh.doSSH(withoutMachine,env.INSTANA_CMD)
+            if detectContainer(env,withoutMachine,env.INSTANA_CONTAINER_NAME):
+                Logger.info(f"Starting application without k2 agent on {withoutMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                appStatus, appContainerId = getAndRemoveContainer(env,withoutMachine,env.APP_CONTAINER_NAME)
+                if appStatus:
+                    id=ssh.doSSH(withoutMachine,env.APP_INSTALL_WITHOUT_CMD)
+                    id=id.replace("\n","").replace("\r","")
+                    out=re.findall("[^\s]+", id)
+                    if len(out) == 1 and id!="" and id!=None:
+                        Logger.info("Detected:: %s"%(id),extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                        if detectContainerFromLogs(env,withoutMachine,id,env.APP_DETECT_TXT):
+                            if env.LC == "php":
+                                startRSSMonitor(env,withoutMachine,id)
+                            else:
+                                makeRequest(env,withoutMachine)
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+
+def startRequestFiring(env,machine,containerName,dir):
+    try:
+        if getAndRemoveContainer(env,machine,containerName):
+            Logger.info(f"Starting {containerName} container at {machine.ip}...",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            cmd = f"cd {dir}; docker run -itd -v $(pwd):/var/loadtest -v $SSH_AUTH_SOCK:/ssh-agent -e SSH_AUTH_SOCK=/ssh-agent --net host --name {containerName} direvius/yandex-tank"
+            # print(cmd)
+            ssh.doSSH(machine,cmd)
+            print("Started!")
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+
+def updateAgentConfig(env, fileName, tmpName):
+    try:
+        out = ssh.doSCP(env.WITH_MACHINE,tmpName,f"{K2.DIR}/k2install/.agent.properties",False)
+        # print(out)
         
-        if os.path.exists(tmpName):
-            os.remove(tmpName) 
-        f.close()
-    fp.close()
-    
-    out2 = ssh.doSCP(env.WITH_MACHINE,fileName,f"{K2.DIR}/k2install/.agent.properties")
-    # print(out2)
-    if os.path.exists(fileName):
-        os.remove(fileName)
-
-def updateEnvConfig(fileName, tmpName):
-    out = ssh.doSCP(env.WITH_MACHINE,tmpName,f"{K2.DIR}/k2install/env.properties",False)
-    # print(out)
-    
-    if os.path.exists(fileName):
-        os.remove(fileName)
-    with open(tmpName, 'r+') as fp:
-        f = open(fileName, "w")
-        for c, line in enumerate(fp):
-            if "k2_agent_validator_endpoint" in line and f"{K2.VALIDATOR_IP}" not in line:
-                # print("%s--->Update"%c)
-                line = "k2_agent_validator_endpoint=ws://%s:54321\n"%(K2.VALIDATOR_IP)
-            if "k2_agent_resource_endpoint" in line and f"{K2.VALIDATOR_IP}" not in line:
-                # print("%s--->Update"%c)
-                line = "k2_agent_resource_endpoint=http://%s:54322\n"%(K2.VALIDATOR_IP)
-            f.write(line)
+        if os.path.exists(fileName):
+            os.remove(fileName)
+        with open(tmpName, 'r+') as fp:
+            f = open(fileName, "w")
+            for c, line in enumerate(fp):
+                if "prevent_web_agent_image=" in line and f"{K2.IMAGE}" not in line:
+                    Logger.debug("%s--->Update"%c,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                    line = "prevent_web_agent_image=%s\n"%(K2.IMAGE)
+                if "micro_agent_image=" in line and f"{K2.IMAGE}" not in line:
+                    Logger.debug("%s--->Update"%c,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                    line = "micro_agent_image=%s\n"%(K2.IMAGE)
+                if "prevent_web_agent_image_tag=" in line and f"{K2.VALIDATOR_TAG}" not in line:
+                    Logger.debug("%s--->Update"%c,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                    line = "prevent_web_agent_image_tag=%s\n"%(K2.VALIDATOR_TAG)
+                if "micro_agent_image_tag=" in line and f"{K2.MICROAGENT_TAG}" not in line:
+                    Logger.debug("%s--->Update"%c,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+                    line = "micro_agent_image_tag=%s\n"%(K2.MICROAGENT_TAG)
+                f.write(line)
+            
+            if os.path.exists(tmpName):
+                os.remove(tmpName) 
+            f.close()
+        fp.close()
         
-        if os.path.exists(tmpName):
-            os.remove(tmpName) 
-        f.close()
-    fp.close()
-    
-    out2 = ssh.doSCP(env.WITH_MACHINE,fileName,f"{K2.DIR}/k2install/env.properties")
-    # print(out2)
-    if os.path.exists(fileName):
-        os.remove(fileName)
+        out2 = ssh.doSCP(env.WITH_MACHINE,fileName,f"{K2.DIR}/k2install/.agent.properties")
+        # print(out2)
+        if os.path.exists(fileName):
+            os.remove(fileName)
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
 
-def updateLoadFile(user: ssh.User, dir, fileName, tmpName):
-    out = ssh.doSCP(env.LOAD_MACHINE,tmpName,f"{dir}/load.yaml",False)
-    # print(out)
-
-    if os.path.exists(fileName):
-        os.remove(fileName)
-    with open(tmpName, 'r+') as fp:
-        f = open(fileName, "w")
-        for c, line in enumerate(fp):
-            if "address:" in line and f"{user.ip}:{env.APP_PORT}" not in line:
-                # print("%s--->Update"%c)
-                line = "  address: %s:%s # [Target's address]:[target's port]\n"%(user.ip,env.APP_PORT)
-            if "schedule:" in line and f"{env.LONGEVITY_TIME}" not in line:
-                # print("%s--->Update"%c)
-                line = "    schedule: const(%s) # starting from 1rps growing linearly to 10rps during 10 minutes\n"%(env.LONGEVITY_TIME)
-            f.write(line)
+def updateEnvConfig(env, fileName, tmpName):
+    try:
+        out = ssh.doSCP(env.WITH_MACHINE,tmpName,f"{K2.DIR}/k2install/env.properties",False)
+        # print(out)
         
-        if os.path.exists(tmpName):
-            os.remove(tmpName) 
-        f.close()
-    fp.close()
-    
-    out2 = ssh.doSCP(env.LOAD_MACHINE,fileName,f"{dir}/load.yaml")
-    # print(out2)
-    if os.path.exists(fileName):
-        os.remove(fileName)
+        if os.path.exists(fileName):
+            os.remove(fileName)
+        with open(tmpName, 'r+') as fp:
+            f = open(fileName, "w")
+            for c, line in enumerate(fp):
+                if "k2_agent_validator_endpoint" in line and f"{K2.VALIDATOR_IP}" not in line:
+                    # print("%s--->Update"%c)
+                    line = "k2_agent_validator_endpoint=ws://%s:54321\n"%(K2.VALIDATOR_IP)
+                if "k2_agent_resource_endpoint" in line and f"{K2.VALIDATOR_IP}" not in line:
+                    # print("%s--->Update"%c)
+                    line = "k2_agent_resource_endpoint=http://%s:54322\n"%(K2.VALIDATOR_IP)
+                f.write(line)
+            
+            if os.path.exists(tmpName):
+                os.remove(tmpName) 
+            f.close()
+        fp.close()
+        
+        out2 = ssh.doSCP(env.WITH_MACHINE,fileName,f"{K2.DIR}/k2install/env.properties")
+        # print(out2)
+        if os.path.exists(fileName):
+            os.remove(fileName)
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
 
-def cleanMachine(user: ssh.User):
-    cmd = f"docker rm -f $(docker ps -aq) && rm -rf /opt/k2root && rm -rf {K2.DIR}"
-    doClean(user,cmd)
+def updateLoadFile(env, user: ssh.User, dir, fileName, tmpName):
+    try:
+        out = ssh.doSCP(env.LOAD_MACHINE,tmpName,f"{dir}/load.yaml",False)
+        # print(out)
 
-def doClean(user: ssh.User, cmd):
-    print(f"Cleaning up {user.ip}...")
-    # print(cmd)
-    ssh.doSSH(user,cmd)
-    print(f"{user.ip} is Cleaned!")
+        if os.path.exists(fileName):
+            os.remove(fileName)
+        with open(tmpName, 'r+') as fp:
+            f = open(fileName, "w")
+            for c, line in enumerate(fp):
+                if "address:" in line and f"{user.ip}:{env.APP_PORT}" not in line:
+                    # print("%s--->Update"%c)
+                    line = "  address: %s:%s # [Target's address]:[target's port]\n"%(user.ip,env.APP_PORT)
+                if "schedule:" in line and f"{env.LONGEVITY_TIME}" not in line:
+                    # print("%s--->Update"%c)
+                    line = "    schedule: const(%s) # starting from 1rps growing linearly to 10rps during 10 minutes\n"%(env.LONGEVITY_TIME)
+                f.write(line)
+            
+            if os.path.exists(tmpName):
+                os.remove(tmpName) 
+            f.close()
+        fp.close()
+        
+        out2 = ssh.doSCP(env.LOAD_MACHINE,fileName,f"{dir}/load.yaml")
+        # print(out2)
+        if os.path.exists(fileName):
+            os.remove(fileName)
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
 
-def doCleanUp():
+def cleanMachine(env,user: ssh.User):
+    try:
+        cmd = f"docker rm -f $(docker ps -aq) && rm -rf /opt/k2root && rm -rf {K2.DIR}"
+        doClean(env,user,cmd)
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+
+def doClean(env,user: ssh.User, cmd):
+    try:
+        Logger.info("Cleaning up %s..."%user.ip,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+        # print(cmd)
+        ssh.doSSH(user,cmd)
+        Logger.info(f"{user.ip} is Cleaned!",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+
+def doCleanUp(env):
     # clean apps and k2
-    cleanMachine(env.WITH_MACHINE)
-    cleanMachine(env.WITHOUT_MACHINE)
+    cleanMachine(env,env.WITH_MACHINE)
+    cleanMachine(env,env.WITHOUT_MACHINE)
     # clean yandex
-    getAndRemoveContainer(env.LOAD_MACHINE, env.WITH_YANDEX_NAME)
-    getAndRemoveContainer(env.LOAD_MACHINE, env.WITHOUT_YANDEX_NAME)
+    getAndRemoveContainer(env,env.LOAD_MACHINE, env.WITH_YANDEX_NAME)
+    getAndRemoveContainer(env,env.LOAD_MACHINE, env.WITHOUT_YANDEX_NAME)
     # clean yandex logs
-    doClean(env.LOAD_MACHINE,f"rm -rf {env.YANDEX_WITH_DIR}/logs/*")
-    doClean(env.LOAD_MACHINE,f"rm -rf {env.YANDEX_WITHOUT_DIR}/logs/*")
+    doClean(env,env.LOAD_MACHINE,f"rm -rf {env.YANDEX_WITH_DIR}/logs/* && rm -rf {env.YANDEX_WITHOUT_DIR}/logs/*")
+
 
 
 def pickEnv():
-    global lang
+    global lc
     clean = False
-    lang = None
+    lc = None
     argv = sys.argv[1:]
 
     try:
@@ -284,26 +347,47 @@ def pickEnv():
 
     for opt, arg in opts:
         if opt in ['-l','--language']:
-            lang = arg
+            lc = arg
         if opt in ['-c','--clean']:
-            lang = arg
+            lc = arg
             clean = True
 
-    global env
-    match lang:
-        case "node":
-            import env_node as env
-        case "python":
-            import env_python as env
-        case "java":
-            import env_java as env
-        case "php":
-            import env_php as env
-        case default:
-            showHelp()
-            return
-            
-    print("\n{:<40} {:<40}".format("Lanaguage collector :: ",lang.upper()))
+    # global env
+    if lc=='all':
+        threading.Thread(target=animate).start()
+
+    if lc=="node" or lc=="all":
+        import env_node
+        node = threading.Thread(target=printInfo,args=(env_node,clean,))
+        node.start()
+        # node.join()
+    if lc=="java" or lc=="all":
+        import env_java
+        java = threading.Thread(target=printInfo,args=(env_java,clean,))
+        java.start()
+        # java.join()
+    if lc=="python" or lc=="all":
+        import env_python
+        python = threading.Thread(target=printInfo,args=(env_python,clean,))
+        python.start()
+        # python.join()
+    if lc=="php" or lc=="all":
+        import env_php
+        php = threading.Thread(target=printInfo,args=(env_php,clean,))
+        php.start()
+        # php.join()
+    if lc=='all':
+        node.join()
+        java.join()
+        python.join()
+        php.join()
+        global done 
+        done = True
+    if lc not in ["node","java","php","python","all"]:
+        showHelp()
+
+def printInfo(env,clean): 
+    print("\n{:<40} {:<40}".format("Lanaguage collector :: ",env.LC.upper()))
     print("{:<40} {:<40}".format("Machine with K2 :: ",env.WITH_MACHINE.ip))
     print("{:<40} {:<40}".format("Machine without K2 :: ",env.WITHOUT_MACHINE.ip))
     print("{:<40} {:<40}".format("K2 agent install command:: ",env.K2_INSTALL_CMD))
@@ -313,13 +397,27 @@ def pickEnv():
     print("{:<40} {:<40}".format("Validator:: ",K2.VALIDATOR_TAG))
     print("{:<40} {:<40}".format("Microagent:: ",K2.MICROAGENT_TAG))
     print("{:<40} {:<40}".format("App:: ",env.APP_CONTAINER_NAME))
-    answer = input("Continue (y/yes or n/no)?\t\t")
+    if lc != 'all':
+        answer = input("Continue (y/yes or n/no)?\t\t")
+    else:
+        answer = "yes"
+        print("Press ^C (within 30sec) to stop if values are not as per requirement!")
+        time.sleep(30)
     if answer in ['y', 'yes']:
         if clean:
-            doCleanUp()
+            doCleanUp(env)
         else:
-            doCleanUp()
-            startUp()
+            if lc!='all':
+                threading.Thread(target=animate).start()
+            doCleanUp(env)
+            if lc!='all':
+                start = threading.Thread(target=startUp,args=(env,))
+                start.start()
+                start.join()
+                global done
+                done = True
+            else:
+                startUp(env)
     else:
         print("Update these values in respective env file!")
 
@@ -345,30 +443,30 @@ def showHelp():
     print("{:<35} {:<40}".format("","node - to start longevity for Node agent"))
     print("{:<35} {:<40}".format("","python - to start longevity for Python agent"))
     print("{:<35} {:<40}".format("","java - to start longevity for Java agent"))
-    print("{:<35} {:<40}".format("","php - to start longevity for PHP agent\u001b[0m"))
+    print("{:<35} {:<40}".format("","php - to start longevity for PHP agent"))
+    print("{:<35} {:<40}".format("","all - to start longevity for all mentioned agents\u001b[0m"))
     print("{:<35} {:<40}".format("\033[4;32m-c/--clean <argument>\u001b[0m","\033[1;29mClean longevity setup for specified language"))
     print("{:<30} {:<40}".format("","Valid argument with -c are:"))
     print("{:<35} {:<40}".format("","node - to clean longevity setup for Node agent"))
     print("{:<35} {:<40}".format("","python - to clean longevity setup for Python agent"))
     print("{:<35} {:<40}".format("","java - to clean longevity setup for Java agent"))
-    print("{:<35} {:<40}".format("","php - to clean longevity setup for PHP agent\u001b[0m"))
+    print("{:<35} {:<40}".format("","php - to clean longevity setup for PHP agent"))
+    print("{:<35} {:<40}".format("","all - to clean longevity setup for all mentioned agents\u001b[0m"))
 
-def startUp():
-    print(f"*** Make sure VPN is connected ***")
-    threading.Thread(target=animate).start()
-    threadWith = threading.Thread(target=startWith,args=(env.WITH_MACHINE,))
-    threadWithout = threading.Thread(target=startWithout,args=(env.WITHOUT_MACHINE,))
+def startUp(env):
+    threadWith = threading.Thread(target=startWith,args=(env,env.WITH_MACHINE,))
+    threadWithout = threading.Thread(target=startWithout,args=(env,env.WITHOUT_MACHINE,))
 
     threadWith.start()
     threadWithout.start()
 
     threadWith.join()
     threadWithout.join()
-    print("Longevity application setup complete!!")
+    Logger.info("Longevity application setup complete!!",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
 
-    print("Updating load.yaml file...")
-    threadFileWith = threading.Thread(target=updateLoadFile,args=(env.WITH_MACHINE,env.YANDEX_WITH_DIR,f"load_with_{lang}.yaml",f"temp_with{lang}.yaml"))
-    threadFileWithout = threading.Thread(target=updateLoadFile,args=(env.WITHOUT_MACHINE,env.YANDEX_WITHOUT_DIR,f"load_without_{lang}.yaml",f"temp_without_{lang}.yaml"))
+    Logger.info("Updating load.yaml file...",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+    threadFileWith = threading.Thread(target=updateLoadFile,args=(env,env.WITH_MACHINE,env.YANDEX_WITH_DIR,f"load_with_{env.LC}.yaml",f"temp_with{env.LC}.yaml"))
+    threadFileWithout = threading.Thread(target=updateLoadFile,args=(env,env.WITHOUT_MACHINE,env.YANDEX_WITHOUT_DIR,f"load_without_{env.LC}.yaml",f"temp_without_{env.LC}.yaml"))
 
     threadFileWith.start()
     threadFileWithout.start()
@@ -376,18 +474,30 @@ def startUp():
     threadFileWith.join()
     threadFileWithout.join()
 
-    print("Starting request firing...")
-    threadFiringWith = threading.Thread(target=startRequestFiring,args=(env.LOAD_MACHINE,env.WITH_YANDEX_NAME,env.YANDEX_WITH_DIR))
-    threadFiringWithout = threading.Thread(target=startRequestFiring,args=(env.LOAD_MACHINE,env.WITHOUT_YANDEX_NAME,env.YANDEX_WITHOUT_DIR))
+    Logger.info("Starting request firing...",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+    threadFiringWith = threading.Thread(target=startRequestFiring,args=(env,env.LOAD_MACHINE,env.WITH_YANDEX_NAME,env.YANDEX_WITH_DIR))
+    threadFiringWithout = threading.Thread(target=startRequestFiring,args=(env,env.LOAD_MACHINE,env.WITHOUT_YANDEX_NAME,env.YANDEX_WITHOUT_DIR))
 
     threadFiringWith.start()
     threadFiringWithout.start()
 
     threadFiringWith.join()
     threadFiringWithout.join()
-    global done 
-    done = True
-    print("Longevity started successfully!!")
+    
+    Logger.info("Longevity started successfully!!",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
 
 if __name__ == "__main__":
-    pickEnv()
+    print(f"*** Make sure VPN is connected ***")
+    logging.basicConfig(filename=f"longevity.log",format='%(asctime)s [%(levelname)s] :%(lc)s: - [%(ext)s] - %(message)s',filemode='w')
+    # Creating an object
+    global Logger
+    Logger = logging.getLogger()
+    # Setting the threshold of logger to DEBUG
+    Logger.addHandler(logging.StreamHandler(sys.stdout))
+    Logger.setLevel(logging.DEBUG)
+    print("\033[1;34mCheck automation logs at\u001b[0m: \033[4;31mlongevity.log\u001b[0m")
+    Logger.info(f"Longevity Log file Initialised at {datetime.datetime.now()}",extra={"ext":"Monu Lakshkar","lc":"K2"})
+    try:
+        pickEnv()
+    except Exception as e:
+        Logger.error(e,extra={"ext":"Monu Lakshkar","lc":"K2"})
