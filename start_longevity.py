@@ -6,15 +6,18 @@ import re
 import sys
 import threading
 import time
+import numpy as np
+
+import pandas as pd
 import ssh
 import k2_env as K2
 
 sleep = 10
-interval = 30
+interval = 18
 
-def detectContainer(env, user: ssh.User, containerName):
+def detectContainer(env, user: ssh.User, containerName, c=0):
     try:
-        count = 0
+        count = c
         id = ""
         
         Logger.info(f"Detecting running {containerName} container at {user.ip} at {count*sleep}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
@@ -23,37 +26,37 @@ def detectContainer(env, user: ssh.User, containerName):
         id=ssh.doSSH(user,cmd)
         id=id.replace("\n","").replace("\r","")
         if id!="" and id!=None:
-            Logger.info(f"{containerName} started successfully at {user.ip} after {count*30}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            Logger.info(f"{containerName} started successfully at {user.ip} after {count*sleep}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
             return True
 
         count+=1
         time.sleep(sleep)
         if count > interval:
-            Logger.warning(f"No running container found at {user.ip} after {count*30}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            Logger.warning(f"No running container found at {user.ip} after {count*sleep}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
             return False
-        return detectContainer(env,user,containerName)
+        return detectContainer(env,user,containerName,count)
     except Exception as e:
         Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
         return False
 
-def detectContainerFromLogs(env,user: ssh.User, id, detect_txt):
+def detectContainerFromLogs(env,user: ssh.User, id, detect_txt, c=0):
     try:
-        count = 0
+        count = c
         
         Logger.info(f"Detecting running container with ID {id} at {user.ip} at {count*sleep}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
         cmd = "docker logs '%s'" % (id)
         out=ssh.doSSH(user,cmd)
         out=out.replace("\n","").replace("\r","")
         if detect_txt in out:
-            Logger.info(f"Container with ID {id} started successfully at {user.ip} after {count*30}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            Logger.info(f"Container with ID {id} started successfully at {user.ip} after {count*sleep}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
             return True
 
         count+=1
         time.sleep(sleep)
         if count > interval:
-            Logger.warning(f"No running container found at {user.ip} after {count*30}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+            Logger.warning(f"No running container found at {user.ip} after {count*sleep}sec",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
             return False
-        return detectContainerFromLogs(env,user,id,detect_txt)
+        return detectContainerFromLogs(env,user,id,detect_txt,count)
     except Exception as e:
         Logger.error(e,extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
         return False
@@ -140,7 +143,7 @@ def startWith(env,withMachine):
                 Logger.info("Validated!!",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
 
                 Logger.info(f"Launching k2 agent on {withMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
-                ssh.doSSH(withMachine,env.K2_INSTALL_CMD)
+                ssh.doSSH(withMachine,K2.K2_INSTALL_CMD)
                 Logger.info(f"K2 agent started.\nStarting application with k2 agent on {withMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
                 time.sleep(30)
                 appStatus, appContainerId = getAndRemoveContainer(env,withMachine,env.APP_CONTAINER_NAME)
@@ -347,57 +350,58 @@ def pickEnv():
 
     for opt, arg in opts:
         if opt in ['-l','--language']:
-            lc = arg
+            lc = arg.split(",")
         if opt in ['-c','--clean']:
-            lc = arg
+            lc = arg.split(",")
             clean = True
 
     # global env
-    if lc=='all':
+    if "all" in lc:
         threading.Thread(target=animate).start()
 
-    if lc=="node" or lc=="all":
+    if "node" in lc or "all" in lc:
         import env_node
         node = threading.Thread(target=printInfo,args=(env_node,clean,))
         node.start()
         # node.join()
-    if lc=="java" or lc=="all":
+    if "java" in lc or "all" in lc:
         import env_java
         java = threading.Thread(target=printInfo,args=(env_java,clean,))
         java.start()
         # java.join()
-    if lc=="python" or lc=="all":
+    if "python" in lc or "all" in lc:
         import env_python
         python = threading.Thread(target=printInfo,args=(env_python,clean,))
         python.start()
         # python.join()
-    if lc=="php" or lc=="all":
+    if "php" in lc or "all" in lc:
         import env_php
         php = threading.Thread(target=printInfo,args=(env_php,clean,))
         php.start()
         # php.join()
-    if lc=='all':
+    if "all" in lc:
         node.join()
         java.join()
         python.join()
         php.join()
         global done 
         done = True
-    if lc not in ["node","java","php","python","all"]:
+    if not pd.Series(np.array(lc)).isin(np.array(["node","java","php","python","all"])).any():
         showHelp()
 
 def printInfo(env,clean): 
     print("\n{:<40} {:<40}".format("Lanaguage collector :: ",env.LC.upper()))
     print("{:<40} {:<40}".format("Machine with K2 :: ",env.WITH_MACHINE.ip))
     print("{:<40} {:<40}".format("Machine without K2 :: ",env.WITHOUT_MACHINE.ip))
-    print("{:<40} {:<40}".format("K2 agent install command:: ",env.K2_INSTALL_CMD))
+    print("{:<40} {:<40}".format("K2 agent install command:: ",K2.K2_INSTALL_CMD))
     print("{:<40} {:<40}".format("K2 Cloud:: ",K2.K2_CLOUD))
     print("{:<40} {:<40}".format("K2 Version:: ",K2.K2_VERSION))
     print("{:<40} {:<40}".format("Validator IP:: ",f'{K2.VALIDATOR_IP if K2.VALIDATOR_IP!="" else env.WITH_MACHINE.ip} (make sure validator is in running state)'))
     print("{:<40} {:<40}".format("Validator:: ",K2.VALIDATOR_TAG))
     print("{:<40} {:<40}".format("Microagent:: ",K2.MICROAGENT_TAG))
     print("{:<40} {:<40}".format("App:: ",env.APP_CONTAINER_NAME))
-    if lc != 'all':
+    # print(lc, len(lc))
+    if  len(lc)==1 and "all" not in lc:
         answer = input("Continue (y/yes or n/no)?\t\t")
     else:
         answer = "yes"
@@ -439,14 +443,14 @@ def showHelp():
     print(f"\nUsage: \033[1;33mpython3 {os.path.basename(__file__)} <OPTIONS>\u001b[0m")
     print("\033[1;34m\nOPTIONS:\u001b[0m")
     print("{:<35} {:<40}".format("\033[4;32m-l/--language <argument>\u001b[0m","\033[1;29mStart longevity for specified language"))
-    print("{:<30} {:<40}".format("","Valid argument with -l are:"))
+    print("{:<30} {:<40}".format("","Valid argument with -l are: (you can pass comma(,) seperated values)"))
     print("{:<35} {:<40}".format("","node - to start longevity for Node agent"))
     print("{:<35} {:<40}".format("","python - to start longevity for Python agent"))
     print("{:<35} {:<40}".format("","java - to start longevity for Java agent"))
     print("{:<35} {:<40}".format("","php - to start longevity for PHP agent"))
     print("{:<35} {:<40}".format("","all - to start longevity for all mentioned agents\u001b[0m"))
     print("{:<35} {:<40}".format("\033[4;32m-c/--clean <argument>\u001b[0m","\033[1;29mClean longevity setup for specified language"))
-    print("{:<30} {:<40}".format("","Valid argument with -c are:"))
+    print("{:<30} {:<40}".format("","Valid argument with -c are: (you can pass comma(,) seperated values)"))
     print("{:<35} {:<40}".format("","node - to clean longevity setup for Node agent"))
     print("{:<35} {:<40}".format("","python - to clean longevity setup for Python agent"))
     print("{:<35} {:<40}".format("","java - to clean longevity setup for Java agent"))
