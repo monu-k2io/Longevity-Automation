@@ -1,5 +1,7 @@
+from ast import arg
 import os
 import concurrent.futures
+import sys
 import plot
 import ssh
 
@@ -82,6 +84,8 @@ def getCSVFile(user: ssh.User,id,oFile):
     return manageCSV(oFile)
 
 # with
+argv = sys.argv[1:]
+print(argv)
 print(f"*** Make sure VPN is connected ***")
 
 # print(f"\n## WITH AGENT")
@@ -103,4 +107,7 @@ with concurrent.futures.ThreadPoolExecutor() as executor:
 print("Data collected successfully!!")
 
 if outWith and outWithout:
-    plot.plotGraph()
+    if len(argv) == 2:
+        plot.plotGraph(argv[0],argv[1])
+    else:
+        plot.plotGraph()

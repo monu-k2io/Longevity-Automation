@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-def plotGraph():
+def plotGraph(redLabel="RSS with agent",blueLabel="RSS without agent"):
     # set theme
     sns.set_theme()
 
@@ -18,8 +18,8 @@ def plotGraph():
     # print(x)
     ax = plt.axes()
     # plot rss data
-    plt.plot(data2['C'], data2['F'], label = "RSS without agent", color='#1976D2', linewidth=1.2)
-    plt.plot(data['C'], data['F'], label = "RSS with agent", color='#B71C1C', linewidth=1.5)
+    plt.plot(data2['C'], data2['F'], label = blueLabel, color='#1976D2', linewidth=1.2)
+    plt.plot(data['C'], data['F'], label = redLabel, color='#B71C1C', linewidth=1.5)
 
     # plot process data
     # plt.plot(data['C'], data['A'], label = "Proc with agent", color='#FF6F00')
