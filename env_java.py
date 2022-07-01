@@ -18,4 +18,4 @@ LOAD_MACHINE = ssh.User("192.168.5.62","root","k2cyber")
 FIRST_CURL = "curl -X GET 'http://localhost:8080/rce?arg=.%2F%20%3B%20echo%20%24%28pwd%29' -H  'accept: */*'"
 APP_DETECT_TXT = "Started K2JavaVulnerablePerfApplication"
 APP_PORT = "8080"
-LONGEVITY_TIME = "200, 60h"
+LONGEVITY_TIME = "200, 201h"

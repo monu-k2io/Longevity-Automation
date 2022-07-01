@@ -379,14 +379,20 @@ def pickEnv():
         php = threading.Thread(target=printInfo,args=(env_php,clean,))
         php.start()
         # php.join()
+    if "go" in lc or "all" in lc:
+        import env_go
+        go = threading.Thread(target=printInfo,args=(env_go,clean,))
+        go.start()
+        # go.join()
     if "all" in lc:
         node.join()
         java.join()
         python.join()
         php.join()
+        go.join()
         global done 
         done = True
-    if not pd.Series(np.array(lc)).isin(np.array(["node","java","php","python","all"])).any():
+    if not pd.Series(np.array(lc)).isin(np.array(["node","java","php","python","go","all"])).any():
         showHelp()
 
 def printInfo(env,clean): 
@@ -448,6 +454,7 @@ def showHelp():
     print("{:<35} {:<40}".format("","python - to start longevity for Python agent"))
     print("{:<35} {:<40}".format("","java - to start longevity for Java agent"))
     print("{:<35} {:<40}".format("","php - to start longevity for PHP agent"))
+    print("{:<35} {:<40}".format("","go - to start longevity for GO agent"))
     print("{:<35} {:<40}".format("","all - to start longevity for all mentioned agents\u001b[0m"))
     print("{:<35} {:<40}".format("\033[4;32m-c/--clean <argument>\u001b[0m","\033[1;29mClean longevity setup for specified language"))
     print("{:<30} {:<40}".format("","Valid argument with -c are: (you can pass comma(,) seperated values)"))
@@ -455,6 +462,7 @@ def showHelp():
     print("{:<35} {:<40}".format("","python - to clean longevity setup for Python agent"))
     print("{:<35} {:<40}".format("","java - to clean longevity setup for Java agent"))
     print("{:<35} {:<40}".format("","php - to clean longevity setup for PHP agent"))
+    print("{:<35} {:<40}".format("","go - to clean longevity setup for GO agent"))
     print("{:<35} {:<40}".format("","all - to clean longevity setup for all mentioned agents\u001b[0m"))
 
 def startUp(env):

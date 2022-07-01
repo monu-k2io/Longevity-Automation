@@ -2,6 +2,7 @@ from ast import arg
 import os
 import concurrent.futures
 import sys
+from tokenize import String
 import plot
 import ssh
 
@@ -20,12 +21,13 @@ def getContainer(user: ssh.User,oFile):
         return getCSVFile(user,id,oFile)
     else:
         print("No running container found.")
+        return getCSVFile(user,id,oFile)
         return False
 
-def manageCSV(iFile):
+def manageCSV(iFile: str):
     print("Modifying and calculating data...")
     tempFile = open("rss_"+iFile, 'w+' )
-    tempFile.write("A,B,C,D,E,F\n") # names given to columns in csv file respectively
+    tempFile.write("A,B,C,D,E,F,G\n") # names given to columns in csv file respectively
     avgProc = 0
     avgMem = 0
     with open(iFile, 'r') as fp:
@@ -38,7 +40,8 @@ def manageCSV(iFile):
             valInMB = int(tempLine[1])/1024
             avgProc += proc
             avgMem += valInMB
-            newLine=line.replace("\n","")+" "+str(valInMB)+"\n"
+            # newLine=line.replace("\n","")+" "+str(valInMB)+"\n"
+            newLine=line.replace("\n","")+" "+str(valInMB)+" "+str(valInMB/proc)+"\n"
             xx=newLine.replace(" ",",")
             tempFile.write(xx)
         # print('Total Lines', c + 1)
@@ -52,13 +55,15 @@ def manageCSV(iFile):
             pass
     # print('Total Lines', count + 1)
     fp.close()
+    avgMem=round(avgMem/count)
+    avgProc=round(avgProc/count)
     print("Completed!")
-
-    print("\n",iFile)
+    displayFileName = iFile.replace(".csv","")
+    print("\n %s agent"%(displayFileName))
     print("======================")
-    print(f"Average RSS consumed by all the processes {iFile} agent = ",str(avgMem/count))
-    print(f"Average process spawned in {iFile} agent case = ",str(avgProc/count))
-    print(f"Average RSS used per process {iFile} agent = ",str(avgMem/avgProc))
+    print(f"Average RSS consumed by all the processes {displayFileName} agent = ",str(avgMem))
+    print(f"Average process spawned in {displayFileName} agent case = ",str(avgProc))
+    print(f"Average RSS used per process {displayFileName} agent = ",str(avgMem/avgProc))
     print("======================\n")
     return True
 
@@ -108,6 +113,11 @@ print("Data collected successfully!!")
 
 if outWith and outWithout:
     if len(argv) == 2:
-        plot.plotGraph(argv[0],argv[1])
+        # (WITH,WITHOUT)
+        plot.plotGraph("PHP-RSS","Time","RSS","RSS vs Time",'C','F',redLabel=argv[0],blueLabel=argv[1])
+        plot.plotGraph("PHP-RSS-per-process","Time","RSS per-process","RSS (per-process) vs Time",'C','G',redLabel=argv[0],blueLabel=argv[1])
+        plot.plotGraph("PHP-Process","Time","Process count","Process count vs Time",'C','A',redLabel=argv[0],blueLabel=argv[1])
     else:
-        plot.plotGraph()
+        plot.plotGraph("PHP-RSS","Time","RSS","RSS vs Time",'C','F')
+        plot.plotGraph("PHP-RSS-per-process","Time","RSS per-process","RSS (per-process) vs Time",'C','G')
+        plot.plotGraph("PHP-Process","Time","Process count","Process count vs Time",'C','A')
