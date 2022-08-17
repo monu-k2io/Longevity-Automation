@@ -327,10 +327,12 @@ def doClean(env,user: ssh.User, cmd):
 def doCleanUp(env):
     # clean apps and k2
     cleanMachine(env,env.WITH_MACHINE)
-    cleanMachine(env,env.WITHOUT_MACHINE)
+    if not withOnly:
+        cleanMachine(env,env.WITHOUT_MACHINE)
     # clean yandex
     getAndRemoveContainer(env,env.LOAD_MACHINE, env.WITH_YANDEX_NAME)
-    getAndRemoveContainer(env,env.LOAD_MACHINE, env.WITHOUT_YANDEX_NAME)
+    if not withOnly:
+        getAndRemoveContainer(env,env.LOAD_MACHINE, env.WITHOUT_YANDEX_NAME)
     # clean yandex logs
     doClean(env,env.LOAD_MACHINE,f"rm -rf {env.YANDEX_WITH_DIR}/logs/* && rm -rf {env.YANDEX_WITHOUT_DIR}/logs/*")
 
@@ -354,13 +356,14 @@ def startValidatorAndDb(user: ssh.User):
     
 
 def pickEnv():
-    global lc
+    global lc, withOnly
     clean = False
+    withOnly = False
     lc = None
     argv = sys.argv[1:]
 
     try:
-        opts, args = getopt.getopt(argv, "l:c:h",["language=","clean=","help="])
+        opts, args = getopt.getopt(argv, "l:c:hw",["language=","clean=","help="])
     except:
         showHelp()
         return
@@ -371,6 +374,9 @@ def pickEnv():
         if opt in ['-c','--clean']:
             lc = arg.split(",")
             clean = True
+        if opt in ['-w','--with']:
+            withOnly = True
+    print("ENV:: %s %s %s"%(lc,clean,withOnly))
 
     # global env
     if not K2.VALIDATOR_IP == "":
@@ -495,34 +501,43 @@ def showHelp():
 
 def startUp(env):
     threadWith = threading.Thread(target=startWith,args=(env,env.WITH_MACHINE,))
-    threadWithout = threading.Thread(target=startWithout,args=(env,env.WITHOUT_MACHINE,))
+    if not withOnly:
+        threadWithout = threading.Thread(target=startWithout,args=(env,env.WITHOUT_MACHINE,))
 
     threadWith.start()
-    threadWithout.start()
+    if not withOnly:
+        threadWithout.start()
 
     threadWith.join()
-    threadWithout.join()
+    if not withOnly:
+        threadWithout.join()
     Logger.info("Longevity application setup complete!!",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
 
     Logger.info("Updating load.yaml file...",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
     threadFileWith = threading.Thread(target=updateLoadFile,args=(env,env.WITH_MACHINE,env.YANDEX_WITH_DIR,f"load_with_{env.LC}.yaml",f"temp_with{env.LC}.yaml"))
-    threadFileWithout = threading.Thread(target=updateLoadFile,args=(env,env.WITHOUT_MACHINE,env.YANDEX_WITHOUT_DIR,f"load_without_{env.LC}.yaml",f"temp_without_{env.LC}.yaml"))
+    if not withOnly:
+        threadFileWithout = threading.Thread(target=updateLoadFile,args=(env,env.WITHOUT_MACHINE,env.YANDEX_WITHOUT_DIR,f"load_without_{env.LC}.yaml",f"temp_without_{env.LC}.yaml"))
 
     threadFileWith.start()
-    threadFileWithout.start()
+    if not withOnly:
+        threadFileWithout.start()
 
     threadFileWith.join()
-    threadFileWithout.join()
+    if not withOnly:
+        threadFileWithout.join()
 
     Logger.info("Starting request firing...",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
     threadFiringWith = threading.Thread(target=startRequestFiring,args=(env,env.LOAD_MACHINE,env.WITH_YANDEX_NAME,env.YANDEX_WITH_DIR))
-    threadFiringWithout = threading.Thread(target=startRequestFiring,args=(env,env.LOAD_MACHINE,env.WITHOUT_YANDEX_NAME,env.YANDEX_WITHOUT_DIR))
+    if not withOnly:
+        threadFiringWithout = threading.Thread(target=startRequestFiring,args=(env,env.LOAD_MACHINE,env.WITHOUT_YANDEX_NAME,env.YANDEX_WITHOUT_DIR))
 
     threadFiringWith.start()
-    threadFiringWithout.start()
+    if not withOnly:
+        threadFiringWithout.start()
 
     threadFiringWith.join()
-    threadFiringWithout.join()
+    if not withOnly:
+        threadFiringWithout.join()
     
     Logger.info("Longevity started successfully!!",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
 
