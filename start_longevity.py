@@ -334,7 +334,24 @@ def doCleanUp(env):
     # clean yandex logs
     doClean(env,env.LOAD_MACHINE,f"rm -rf {env.YANDEX_WITH_DIR}/logs/* && rm -rf {env.YANDEX_WITHOUT_DIR}/logs/*")
 
+def startValidatorAndDb(user: ssh.User):
+    try:
+        cmd = f"docker rm -f $(docker ps -aq) && docker rmi {K2.IMAGE}:{K2.VALIDATOR_TAG} && rm -rf /opt/k2root && rm -rf {K2.DIR}"
+        ssh.doSSH(user,cmd)
 
+        db_cmd = "bash /root/kishan/v2-install-scripts/install-db-prod.sh"
+        ic_cmd = f"bash /root/kishan/v2-install-scripts/install-validator-prod.sh public {K2.VALIDATOR_TAG} {K2.K2_GROUP_NAME}"
+        if "k2cloud210" in K2.K2_CLOUD:
+            db_cmd = "bash /root/kishan/v2-install-scripts/install-db.sh"
+            ic_cmd = f"bash /root/kishan/v2-install-scripts/install-validator.sh private {K2.VALIDATOR_TAG} {K2.K2_GROUP_NAME}"
+        
+        out=ssh.doSSH(user,db_cmd)
+        Logger.info(f"{user.ip} started ArangoDB!",extra={"ext":threading.current_thread().name,"lc":f"{K2.VALIDATOR_TAG}".upper()})
+        out=ssh.doSSH(user,ic_cmd)
+        Logger.info(f"{user.ip} started {K2.VALIDATOR_TAG}!",extra={"ext":threading.current_thread().name,"lc":f"{K2.VALIDATOR_TAG}".upper()})
+    except Exception as e:
+        Logger.error(e,extra={"ext":threading.current_thread().name,"lc":f"{K2.VALIDATOR_TAG}".upper()})
+    
 
 def pickEnv():
     global lc
@@ -356,6 +373,11 @@ def pickEnv():
             clean = True
 
     # global env
+    if not K2.VALIDATOR_IP == "":
+        startValidatorAndDb(ssh.User(K2.VALIDATOR_IP,"root","k2cyber"))
+        Logger.info(f"Sleeping for 1 minute to start validator at {K2.VALIDATOR_IP}",extra={"ext":"Monu Lakshkar","lc":"K2"})
+        time.sleep(60)
+
     if "all" in lc:
         threading.Thread(target=animate).start()
 
@@ -384,15 +406,21 @@ def pickEnv():
         go = threading.Thread(target=printInfo,args=(env_go,clean,))
         go.start()
         # go.join()
+    if "ruby" in lc or "all" in lc:
+        import env_ruby
+        ruby = threading.Thread(target=printInfo,args=(env_ruby,clean,))
+        ruby.start()
+        # ruby.join()
     if "all" in lc:
         node.join()
         java.join()
         python.join()
         php.join()
         go.join()
+        ruby.join()
         global done 
         done = True
-    if not pd.Series(np.array(lc)).isin(np.array(["node","java","php","python","go","all"])).any():
+    if not pd.Series(np.array(lc)).isin(np.array(["node","java","php","python","go","ruby","all"])).any():
         showHelp()
 
 def printInfo(env,clean): 
