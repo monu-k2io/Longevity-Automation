@@ -11,8 +11,8 @@ WITH_YANDEX_NAME = "yandex-php-with"
 WITHOUT_YANDEX_NAME = "yandex-php-without"
 YANDEX_WITH_DIR = "/root/longevity/php/with"
 YANDEX_WITHOUT_DIR = "/root/longevity/php/without"
-WITH_MACHINE = ssh.User("192.168.5.133","root","k2cyber")
-WITHOUT_MACHINE = ssh.User("192.168.5.132","root","k2cyber")
+WITH_MACHINE = ssh.User("192.168.5.132","root","k2cyber")
+WITHOUT_MACHINE = ssh.User("192.168.5.133","root","k2cyber")
 LOAD_MACHINE = ssh.User("192.168.5.62","root","k2cyber")
 FIRST_CURL = f'curl --location --request GET "http://localhost:{APP_PORT}/syscall-app/file-access-read.php?page=../../../../etc/passwd"'
 APP_DETECT_TXT = "Apache server started"

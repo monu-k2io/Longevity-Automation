@@ -288,11 +288,13 @@ def updateLoadFile(env, user: ssh.User, dir, fileName, tmpName):
         with open(tmpName, 'r+') as fp:
             f = open(fileName, "w")
             for c, line in enumerate(fp):
-                if "address:" in line and f"{user.ip}:{env.APP_PORT}" not in line:
-                    # print("%s--->Update"%c)
+                ip_format = re.compile(r'([0-9]{1,3}\.){3}[0-9]{1,3}:[0-9]{1,5}')
+                mo = ip_format.search(line)
+                if "address:" in line and f"{user.ip}:{env.APP_PORT}" != mo.group():
+                    print("%s--->Update"%c)
                     line = "  address: %s:%s # [Target's address]:[target's port]\n"%(user.ip,env.APP_PORT)
                 if "schedule:" in line and f"{env.LONGEVITY_TIME}" not in line:
-                    # print("%s--->Update"%c)
+                    print("%s--->Update"%c)
                     line = "    schedule: const(%s) # starting from 1rps growing linearly to 10rps during 10 minutes\n"%(env.LONGEVITY_TIME)
                 f.write(line)
             
