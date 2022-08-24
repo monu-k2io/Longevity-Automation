@@ -127,10 +127,10 @@ def makeRequest(env,user: ssh.User):
 
 def startWith(env,withMachine):
     try:
-        if getAndRemoveContainer(env,withMachine,env.INSTANA_CONTAINER_NAME):
+        if getAndRemoveContainer(env,withMachine,K2.INSTANA_CONTAINER_NAME):
             Logger.info(f"Launching instana agent on {withMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
-            ssh.doSSH(withMachine,env.INSTANA_CMD)
-            if detectContainer(env,withMachine,env.INSTANA_CONTAINER_NAME):
+            ssh.doSSH(withMachine,K2.INSTANA_CMD)
+            if detectContainer(env,withMachine,K2.INSTANA_CONTAINER_NAME):
                 ssh.doSSH(withMachine,f"rm -rfR {K2.DIR}; mkdir {K2.DIR}; ls {K2.DIR}")
                 Logger.info(f"Downloading k2 agent on {withMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
                 ssh.doSSH(withMachine,f"cd {K2.DIR}; wget -O vm-all.zip '{K2.K2_CLOUD}/centralmanager/api/{K2.K2_VERSION}/help/installers/{K2.K2_BUILD}/download/{K2.USER_ID}/{K2.REF_TOKEN}/vm-all?isDocker=true&groupName={K2.K2_GROUP_NAME}&agentDeploymentEnvironment={K2.K2_DEPLOYMENT_ENV}&pullPolicyRequired=false'")
@@ -181,10 +181,10 @@ def startWith(env,withMachine):
 
 def startWithout(env,withoutMachine):
     try:
-        if getAndRemoveContainer(env,withoutMachine,env.INSTANA_CONTAINER_NAME):
+        if getAndRemoveContainer(env,withoutMachine,K2.INSTANA_CONTAINER_NAME):
             Logger.info(f"Launching instana agent on {withoutMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
-            ssh.doSSH(withoutMachine,env.INSTANA_CMD)
-            if detectContainer(env,withoutMachine,env.INSTANA_CONTAINER_NAME):
+            ssh.doSSH(withoutMachine,K2.INSTANA_CMD)
+            if detectContainer(env,withoutMachine,K2.INSTANA_CONTAINER_NAME):
                 Logger.info(f"Starting application without k2 agent on {withoutMachine.ip}",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
                 appStatus, appContainerId = getAndRemoveContainer(env,withoutMachine,env.APP_CONTAINER_NAME)
                 if appStatus:
@@ -341,6 +341,9 @@ def startValidatorAndDb(user: ssh.User):
         cmd = f"docker rm -f $(docker ps -aq) && docker rmi {K2.IMAGE}:{K2.VALIDATOR_TAG} && rm -rf /opt/k2root && rm -rf {K2.DIR}"
         ssh.doSSH(user,cmd)
 
+        Logger.info(f"Launching instana agent on {user.ip}",extra={"ext":threading.current_thread().name,"lc":"validator".upper()})
+        ssh.doSSH(user,K2.INSTANA_CMD)
+
         db_cmd = "bash /root/kishan/v2-install-scripts/install-db-prod.sh"
         ic_cmd = f"bash /root/kishan/v2-install-scripts/install-validator-prod.sh public {K2.VALIDATOR_TAG} {K2.K2_GROUP_NAME}"
         if "k2cloud210" in K2.K2_CLOUD:
@@ -348,6 +351,7 @@ def startValidatorAndDb(user: ssh.User):
             ic_cmd = f"bash /root/kishan/v2-install-scripts/install-validator.sh private {K2.VALIDATOR_TAG} {K2.K2_GROUP_NAME}"
         
         out=ssh.doSSH(user,db_cmd)
+        time.sleep(10)
         Logger.info(f"{user.ip} started ArangoDB!",extra={"ext":threading.current_thread().name,"lc":f"{K2.VALIDATOR_TAG}".upper()})
         out=ssh.doSSH(user,ic_cmd)
         Logger.info(f"{user.ip} started {K2.VALIDATOR_TAG}!",extra={"ext":threading.current_thread().name,"lc":f"{K2.VALIDATOR_TAG}".upper()})
@@ -378,11 +382,15 @@ def pickEnv():
             withOnly = True
     print("ENV:: %s %s %s"%(lc,clean,withOnly))
 
+    if lc == None or not pd.Series(np.array(lc)).isin(np.array(["node","java","php","python","go","ruby","all"])).any():
+        showHelp()
+        return
+
     # global env
-    if not K2.VALIDATOR_IP == "":
-        startValidatorAndDb(ssh.User(K2.VALIDATOR_IP,"root","k2cyber"))
-        Logger.info(f"Sleeping for 1 minute to start validator at {K2.VALIDATOR_IP}",extra={"ext":"Monu Lakshkar","lc":"K2"})
-        time.sleep(60)
+    # if not clean and not K2.VALIDATOR_IP == "":
+    #     startValidatorAndDb(ssh.User(K2.VALIDATOR_IP,"root","k2cyber"))
+    #     Logger.info(f"Sleeping for 1 minute to start validator at {K2.VALIDATOR_IP}",extra={"ext":"Monu Lakshkar","lc":"K2"})
+    #     time.sleep(60)
 
     if "all" in lc:
         threading.Thread(target=animate).start()
@@ -453,7 +461,7 @@ def printInfo(env,clean):
         else:
             if lc!='all':
                 threading.Thread(target=animate).start()
-            doCleanUp(env)
+            # doCleanUp(env)
             if lc!='all':
                 start = threading.Thread(target=startUp,args=(env,))
                 start.start()
@@ -489,6 +497,7 @@ def showHelp():
     print("{:<35} {:<40}".format("","java - to start longevity for Java agent"))
     print("{:<35} {:<40}".format("","php - to start longevity for PHP agent"))
     print("{:<35} {:<40}".format("","go - to start longevity for GO agent"))
+    print("{:<35} {:<40}".format("","ruby - to start longevity for Ruby agent"))
     print("{:<35} {:<40}".format("","all - to start longevity for all mentioned agents\u001b[0m"))
     print("{:<35} {:<40}".format("\033[4;32m-c/--clean <argument>\u001b[0m","\033[1;29mClean longevity setup for specified language"))
     print("{:<30} {:<40}".format("","Valid argument with -c are: (you can pass comma(,) seperated values)"))
@@ -497,6 +506,7 @@ def showHelp():
     print("{:<35} {:<40}".format("","java - to clean longevity setup for Java agent"))
     print("{:<35} {:<40}".format("","php - to clean longevity setup for PHP agent"))
     print("{:<35} {:<40}".format("","go - to clean longevity setup for GO agent"))
+    print("{:<35} {:<40}".format("","ruby - to clean longevity setup for Ruby agent"))
     print("{:<35} {:<40}".format("","all - to clean longevity setup for all mentioned agents\u001b[0m"))
 
 def startUp(env):
