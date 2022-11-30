@@ -93,6 +93,7 @@ def getAndRemoveContainer(env, user: ssh.User,containerName,remove=True):
 def attachApplication(env,user: ssh.User,id):
     try:
         Logger.info(f"Started application attachment...",extra={"ext":threading.current_thread().name,"lc":env.LC.upper()})
+        # ToDo: set --allow-server-restart to TRUE
         cmd = f"docker exec {id} bash -c 'bash /opt/k2root/k2root/collectors/k2-php-agent/k2_php_agent_install_script.sh --allow-server-restart=TRUE'"
         # print(cmd)
         out = ssh.doSSH(user,cmd)
@@ -340,7 +341,7 @@ def doCleanUp(env):
 
 def startValidatorAndDb(user: ssh.User):
     try:
-        cmd = f"docker rm -f $(docker ps -aq) && docker rmi {K2.IMAGE}:{K2.VALIDATOR_TAG} && rm -rf /opt/k2root && rm -rf {K2.DIR}"
+        cmd = f"docker rm -f $(docker ps -aq) && docker pull {K2.IMAGE}:{K2.VALIDATOR_TAG} && rm -rf /opt/k2root && rm -rf {K2.DIR}"
         ssh.doSSH(user,cmd)
 
         Logger.info(f"Launching instana agent on {user.ip}",extra={"ext":threading.current_thread().name,"lc":"validator".upper()})
@@ -362,14 +363,15 @@ def startValidatorAndDb(user: ssh.User):
     
 
 def pickEnv():
-    global lc, withOnly
+    global lc, withOnly, runValidator
     clean = False
     withOnly = False
+    runValidator = False
     lc = None
     argv = sys.argv[1:]
 
     try:
-        opts, args = getopt.getopt(argv, "l:c:hw",["language=","clean=","help="])
+        opts, args = getopt.getopt(argv, "l:c:hwv",["language=","clean=","help="])
     except:
         showHelp()
         return
@@ -382,17 +384,23 @@ def pickEnv():
             clean = True
         if opt in ['-w','--with']:
             withOnly = True
-    print("ENV:: %s %s %s"%(lc,clean,withOnly))
+        if opt in ['-v','--validator']:
+            runValidator = True
+    print("ENV:: %s %s %s %s"%(lc,clean,withOnly,runValidator))
 
     if lc == None or not pd.Series(np.array(lc)).isin(np.array(["node","java","php","python","go","ruby","all"])).any():
         showHelp()
         return
 
     # global env
-    # if not clean and not K2.VALIDATOR_IP == "":
-    #     startValidatorAndDb(ssh.User(K2.VALIDATOR_IP,"root","k2cyber"))
-    #     Logger.info(f"Sleeping for 1 minute to start validator at {K2.VALIDATOR_IP}",extra={"ext":"Monu Lakshkar","lc":"K2"})
-    #     time.sleep(60)
+    if runValidator and not clean and not K2.VALIDATOR_IP == "":
+        startValidatorAndDb(ssh.User(K2.VALIDATOR_IP,"root","k2cyber"))
+        Logger.info(f"Sleeping for 1 minute for validator at {K2.VALIDATOR_IP}",extra={"ext":"Monu Lakshkar","lc":"K2"})
+        time.sleep(60)
+    elif clean and runValidator:
+        Logger.info(f"Removing validator at {K2.VALIDATOR_IP}",extra={"ext":"Monu Lakshkar","lc":"K2"})
+        cmd = f"docker rm -f $(docker ps -aq) && docker rm -f {K2.IMAGE}:{K2.VALIDATOR_TAG} && rm -rf /opt/k2root && rm -rf {K2.DIR}"
+        ssh.doSSH(ssh.User(K2.VALIDATOR_IP,"root","k2cyber"),cmd)
 
     if "all" in lc:
         threading.Thread(target=animate).start()

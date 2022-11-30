@@ -1,6 +1,8 @@
 import tempfile
 import pexpect
 
+NR_PEM = "/Users/mlakshkar/NewRelic/config/nr-incubator.pem"
+
 class User:
   def __init__(self, i, u, p):
     self.ip = i
@@ -12,10 +14,10 @@ def doSSH(user: User, cmd, bg_run=False):
     Throws an exception if the command doesn't return 0.                                                                                                                       
     bgrun: run command in the background"""                                                                                                                               
     try:
-        options = '-q -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -oPubkeyAuthentication=no'                                                                         
+        options = '-q -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -oPubkeyAuthentication=yes'                                                                         
         if bg_run:                                                                                                                                                         
             options += ' -f'                                                                                                                                   
-        ssh_cmd = 'ssh %s@%s %s "%s"' % (user.username, user.ip, options, cmd)      
+        ssh_cmd = 'ssh -i %s %s@%s %s "%s"' % (NR_PEM, user.username, user.ip, options, cmd)      
         # print(ssh_cmd)                                                                                                                 
         out = driver(user,ssh_cmd)
     except Exception as e:
@@ -28,9 +30,9 @@ def doSSH(user: User, cmd, bg_run=False):
 def doSCP(user: User, file, dir, toServer=True):
     try: 
         if toServer:
-            scp_cmd = 'scp %s %s@%s:%s' % (file, user.username, user.ip, dir)
+            scp_cmd = 'scp -i %s %s %s@%s:%s' % (NR_PEM, file, user.username, user.ip, dir)
         else:
-            scp_cmd = 'scp %s@%s:%s %s' % (user.username, user.ip, dir, file)
+            scp_cmd = 'scp -i %s %s@%s:%s %s' % (NR_PEM, user.username, user.ip, dir, file)
         # print(scp_cmd)                                                                                                           
         out =  driver(user,scp_cmd)
     except Exception as e:
@@ -45,8 +47,8 @@ def driver(user: User, cmd, timeout=600):
     fout = open(fname, 'w')                                                                                                                                                    
                                                                                                                                                                                
     child = pexpect.spawnu(cmd, timeout=timeout)  #spawnu for Python 3                                                                                                                          
-    child.expect(['[pP]assword: '])                                                                                                                                                                                                                                                                                               
-    child.sendline(user.password)                                                                                                                                                   
+    # child.expect(['[pP]assword: '])                                                                                                                                                                                                                                                                                               
+    # child.sendline(user.password)                                                                                                                                                   
     child.logfile = fout                                                                                                                                                
     child.expect(pexpect.EOF)                                                                                                                                                  
     child.close()                                                                                                                                                              

@@ -2,17 +2,20 @@ from ast import arg
 import os
 import concurrent.futures
 import sys
-from tokenize import String
 import plot
 import ssh
 
 # PHP
-WITH_MACHINE = ssh.User("192.168.5.132","root","k2cyber")
-WITHOUT_MACHINE = ssh.User("192.168.5.133","root","k2cyber")
+WITH_INT_MACHINE = ssh.User("192.168.5.141","root","k2cyber")
+WITH_NR_MACHINE = ssh.User("192.168.5.140","root","k2cyber")
+WITHOUT_MACHINE = ssh.User("192.168.5.139","root","k2cyber")
+
+FILES = ['rss_without.csv','rss_with_nr.csv','rss_with_int.csv']
+TEMP_FILES = ['without.csv','with_nr.csv','with_int.csv']
 
 def getContainer(user: ssh.User,oFile):
     print(f"Detecting running syscall_php container at {user.ip}...")
-    cmd = "docker ps -a | grep 'k2-php-vulnerable-perf' | cut -b 1-4"
+    cmd = "docker ps | grep 'syscall_php_longevity' | cut -b 1-4"
     # print(cmd)
     id=ssh.doSSH(user,cmd)
     id=id.replace("\n","")
@@ -70,21 +73,13 @@ def manageCSV(iFile: str):
 def getCSVFile(user: ssh.User,id,oFile):
     print(f"Started copying file from container to {user.ip}...")
     cmd = "docker cp "+id+":/rss/rss_longevity.txt "+oFile
-    # print(cmd)
+
     ssh.doSSH(user,cmd)
     print("Completed!")
 
     print(f"Started copying file from {user.ip} to local machine...")
     out = ssh.doSCP(user,oFile,f"/root/{oFile}",False)
-    # print(out)
 
-    # data=ssh.doSSH(user,f"cat {oFile}")
-    # if os.path.exists(oFile):
-    #     os.remove(oFile)
-    # f = open(oFile, "w")
-    # # print(data)
-    # f.write(data)
-    # f.close()
     print("Completed!")
     return manageCSV(oFile)
 
@@ -104,20 +99,28 @@ print(f"*** Make sure VPN is connected ***")
 # outWith = threadFiringWith.join()
 # outWithout = threadFiringWithout.join()
 with concurrent.futures.ThreadPoolExecutor() as executor:
-    futureWith = executor.submit(getContainer, WITH_MACHINE, "with.csv")
-    futureWithout = executor.submit(getContainer, WITHOUT_MACHINE, "without.csv")
-    outWith = futureWith.result()
+    futureWithout = executor.submit(getContainer, WITHOUT_MACHINE, TEMP_FILES[0])
+    futureWithNr = executor.submit(getContainer, WITH_NR_MACHINE, TEMP_FILES[1])
+    futureWithInt = executor.submit(getContainer, WITH_INT_MACHINE, TEMP_FILES[2])
     outWithout = futureWithout.result()
+    outWithNr = futureWithNr.result()
+    outWithInt = futureWithNr.result()
+
+# outWith = outWithout = True
 
 print("Data collected successfully!!")
 
-if outWith and outWithout:
+if outWithout and outWithNr and outWithInt:
+    # marking_without = WITHOUT_MACHINE.ip.split('.')[3]
+    # marking_with_nr = WITH_NR_MACHINE.ip.split('.')[3]
+    # marking_with_int = WITH_INT_MACHINE.ip.split('.')[3]
+
     if len(argv) == 2:
-        # (WITH,WITHOUT)
-        plot.plotGraph("PHP-RSS","Time","RSS","RSS vs Time",'C','F',redLabel=argv[0],blueLabel=argv[1])
-        plot.plotGraph("PHP-RSS-per-process","Time","RSS per-process","RSS (per-process) vs Time",'C','G',redLabel=argv[0],blueLabel=argv[1])
-        plot.plotGraph("PHP-Process","Time","Process count","Process count vs Time",'C','A',redLabel=argv[0],blueLabel=argv[1])
+        # (WITHOUT,WITH_NR,WITH_INT)
+        plot.plotGraph(FILES, "PHP-RSS","Time","RSS","RSS vs Time",'C','F',redLabel=argv[0],blueLabel=argv[1])
+        plot.plotGraph(FILES, "PHP-RSS-per-process","Time","RSS per-process","RSS (per-process) vs Time",'C','G',redLabel=argv[0],blueLabel=argv[1])
+        plot.plotGraph(FILES, "PHP-Process","Time","Process count","Process count vs Time",'C','A',redLabel=argv[0],blueLabel=argv[1])
     else:
-        plot.plotGraph("PHP-RSS","Time","RSS","RSS vs Time",'C','F')
-        plot.plotGraph("PHP-RSS-per-process","Time","RSS per-process","RSS (per-process) vs Time",'C','G')
-        plot.plotGraph("PHP-Process","Time","Process count","Process count vs Time",'C','A')
+        plot.plotGraph(FILES, "PHP-RSS","Time","RSS","RSS vs Time",'C','F')
+        plot.plotGraph(FILES, "PHP-RSS-per-process","Time","RSS per-process","RSS (per-process) vs Time",'C','G')
+        plot.plotGraph(FILES, "PHP-Process","Time","Process count","Process count vs Time",'C','A')

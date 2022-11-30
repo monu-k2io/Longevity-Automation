@@ -4,26 +4,21 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-def plotGraph(out,XLabel,YLabel,title,X="C",Y="F",redLabel="RSS with agent",blueLabel="RSS without agent"):
+COLORS = ['#c4b61b','#1976D2','#B71C1C']
+
+def plotGraph(dataFiles,out,XLabel,YLabel,title,X="C",Y="F"):
     # set theme
     sns.set_theme()
+    # plot config
+    plt.figure(figsize=(10, 3))
+    ax = plt.axes()
+
 
     # Load data
-    data = pd.read_csv('rss_with.csv') # red line
-    data2 = pd.read_csv('rss_without.csv') # blue line
-
-    # Plot
-    plt.figure(figsize=(7, 4))
-    x = range(len(data[X]))
-    # print(x)
-    ax = plt.axes()
-    # plot rss data
-    plt.plot(data2[X], data2[Y], label = blueLabel, color='#1976D2', linewidth=1)
-    plt.plot(data[X], data[Y], label = redLabel, color='#B71C1C', linewidth=1.2)
-
-    # plot process data
-    # plt.plot(data[X], data['A'], label = "Proc with agent", color='#FF6F00')
-    # plt.plot(data2[X], data2['A'], label = "Proc without agent", color='#827717')
+    for i, file in enumerate(dataFiles):
+        data = pd.read_csv(file)
+        # print("{} => {} => {}".format(file,i,COLORS[i]))
+        plt.plot(data[X], data[Y], label = file, color=COLORS[i], linewidth=1.5)
 
     size = math.ceil(len(data[X])/8)
     # print(size)
