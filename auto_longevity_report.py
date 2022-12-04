@@ -1,4 +1,5 @@
 from ast import arg
+import inspect
 import os
 import concurrent.futures
 import sys
@@ -10,8 +11,7 @@ WITH_INT_MACHINE = ssh.User("192.168.5.141","root","k2cyber")
 WITH_NR_MACHINE = ssh.User("192.168.5.140","root","k2cyber")
 WITHOUT_MACHINE = ssh.User("192.168.5.139","root","k2cyber")
 
-FILES = ['rss_without.csv','rss_with_nr.csv','rss_with_int.csv']
-TEMP_FILES = ['without.csv','with_nr.csv','with_int.csv']
+FILES = ['without.csv','with-nr.csv','with-integrated.csv']
 
 def getContainer(user: ssh.User,oFile):
     print(f"Detecting running syscall_php container at {user.ip}...")
@@ -20,6 +20,7 @@ def getContainer(user: ssh.User,oFile):
     id=ssh.doSSH(user,cmd)
     id=id.replace("\n","")
     print("Detected:: ",id)
+    print("File in {} is {}".format(inspect.stack()[0][3], oFile))
     if id!="" and id!=None:
         return getCSVFile(user,id,oFile)
     else:
@@ -29,11 +30,12 @@ def getContainer(user: ssh.User,oFile):
 
 def manageCSV(iFile: str):
     print("Modifying and calculating data...")
-    tempFile = open("rss_"+iFile, 'w+' )
+    tempFile = open(iFile, 'w+' )
     tempFile.write("A,B,C,D,E,F,G\n") # names given to columns in csv file respectively
     avgProc = 0
     avgMem = 0
-    with open(iFile, 'r') as fp:
+    print("File in {} is {}".format(inspect.stack()[0][3], iFile))
+    with open(iFile+".tmp", 'r') as fp:
         for c, line in enumerate(fp):
             xx = newLine = ""
             if(not(line and line.strip())):
@@ -50,10 +52,10 @@ def manageCSV(iFile: str):
         # print('Total Lines', c + 1)
     fp.close()
     tempFile.close()
-    if os.path.exists(iFile):
-        os.remove(iFile)
+    if os.path.exists(iFile+".tmp"):
+        os.remove(iFile+".tmp")
 
-    with open(r"rss_"+iFile, 'r') as fp:
+    with open(iFile, 'r') as fp:
         for count, line in enumerate(fp):
             pass
     # print('Total Lines', count + 1)
@@ -64,9 +66,9 @@ def manageCSV(iFile: str):
     displayFileName = iFile.replace(".csv","")
     print("\n %s agent"%(displayFileName))
     print("======================")
-    print(f"Average RSS consumed by all the processes {displayFileName} agent = ",str(avgMem))
+    print(f"Average RSS consumed by all the processes {displayFileName} agent = {avgMem} MiB")
     print(f"Average process spawned in {displayFileName} agent case = ",str(avgProc))
-    print(f"Average RSS used per process {displayFileName} agent = ",str(avgMem/avgProc))
+    print(f"Average RSS used per process {displayFileName} agent = {avgMem/avgProc} MiB")
     print("======================\n")
     return True
 
@@ -76,9 +78,10 @@ def getCSVFile(user: ssh.User,id,oFile):
 
     ssh.doSSH(user,cmd)
     print("Completed!")
+    print("File in {} is {}".format(inspect.stack()[0][3], oFile))
 
     print(f"Started copying file from {user.ip} to local machine...")
-    out = ssh.doSCP(user,oFile,f"/root/{oFile}",False)
+    out = ssh.doSCP(user,oFile+".tmp",f"/root/{oFile}",False)
 
     print("Completed!")
     return manageCSV(oFile)
@@ -99,9 +102,9 @@ print(f"*** Make sure VPN is connected ***")
 # outWith = threadFiringWith.join()
 # outWithout = threadFiringWithout.join()
 with concurrent.futures.ThreadPoolExecutor() as executor:
-    futureWithout = executor.submit(getContainer, WITHOUT_MACHINE, TEMP_FILES[0])
-    futureWithNr = executor.submit(getContainer, WITH_NR_MACHINE, TEMP_FILES[1])
-    futureWithInt = executor.submit(getContainer, WITH_INT_MACHINE, TEMP_FILES[2])
+    futureWithout = executor.submit(getContainer, WITHOUT_MACHINE, FILES[0])
+    futureWithNr = executor.submit(getContainer, WITH_NR_MACHINE, FILES[1])
+    futureWithInt = executor.submit(getContainer, WITH_INT_MACHINE, FILES[2])
     outWithout = futureWithout.result()
     outWithNr = futureWithNr.result()
     outWithInt = futureWithNr.result()

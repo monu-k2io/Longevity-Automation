@@ -18,7 +18,7 @@ def plotGraph(dataFiles,out,XLabel,YLabel,title,X="C",Y="F"):
     for i, file in enumerate(dataFiles):
         data = pd.read_csv(file)
         # print("{} => {} => {}".format(file,i,COLORS[i]))
-        plt.plot(data[X], data[Y], label = file, color=COLORS[i], linewidth=1.5)
+        plt.plot(data[X], data[Y], label = str(file).split('.')[0], color=COLORS[i], linewidth=1.5)
 
     size = math.ceil(len(data[X])/8)
     # print(size)
