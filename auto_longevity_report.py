@@ -1,32 +1,41 @@
+from ast import arg
+import inspect
 import os
 import concurrent.futures
+import sys
 import plot
 import ssh
 
 # PHP
-WITH_MACHINE = ssh.User("192.168.5.89","root","k2cyber")
-WITHOUT_MACHINE = ssh.User("192.168.5.133","root","k2cyber")
+WITH_INT_MACHINE = ssh.User("192.168.5.141","root","k2cyber")
+WITH_NR_MACHINE = ssh.User("192.168.5.140","root","k2cyber")
+WITHOUT_MACHINE = ssh.User("192.168.5.139","root","k2cyber")
+
+FILES = ['without.csv','with-nr.csv','with-integrated.csv']
 
 def getContainer(user: ssh.User,oFile):
     print(f"Detecting running syscall_php container at {user.ip}...")
-    cmd = "docker ps -a | grep 'k2-php-vulnerable-perf' | cut -b 1-4"
+    cmd = "docker ps | grep 'syscall_php_longevity' | cut -b 1-4"
     # print(cmd)
     id=ssh.doSSH(user,cmd)
     id=id.replace("\n","")
     print("Detected:: ",id)
+    print("File in {} is {}".format(inspect.stack()[0][3], oFile))
     if id!="" and id!=None:
         return getCSVFile(user,id,oFile)
     else:
         print("No running container found.")
+        return getCSVFile(user,id,oFile)
         return False
 
-def manageCSV(iFile):
+def manageCSV(iFile: str):
     print("Modifying and calculating data...")
-    tempFile = open("rss_"+iFile, 'w+' )
-    tempFile.write("A,B,C,D,E,F\n") # names given to columns in csv file respectively
+    tempFile = open(iFile, 'w+' )
+    tempFile.write("A,B,C,D,E,F,G\n") # names given to columns in csv file respectively
     avgProc = 0
     avgMem = 0
-    with open(iFile, 'r') as fp:
+    print("File in {} is {}".format(inspect.stack()[0][3], iFile))
+    with open(iFile+".tmp", 'r') as fp:
         for c, line in enumerate(fp):
             xx = newLine = ""
             if(not(line and line.strip())):
@@ -36,52 +45,50 @@ def manageCSV(iFile):
             valInMB = int(tempLine[1])/1024
             avgProc += proc
             avgMem += valInMB
-            newLine=line.replace("\n","")+" "+str(valInMB)+"\n"
+            # newLine=line.replace("\n","")+" "+str(valInMB)+"\n"
+            newLine=line.replace("\n","")+" "+str(valInMB)+" "+str(valInMB/proc)+"\n"
             xx=newLine.replace(" ",",")
             tempFile.write(xx)
         # print('Total Lines', c + 1)
     fp.close()
     tempFile.close()
-    if os.path.exists(iFile):
-        os.remove(iFile)
+    if os.path.exists(iFile+".tmp"):
+        os.remove(iFile+".tmp")
 
-    with open(r"rss_"+iFile, 'r') as fp:
+    with open(iFile, 'r') as fp:
         for count, line in enumerate(fp):
             pass
     # print('Total Lines', count + 1)
     fp.close()
+    avgMem=round(avgMem/count)
+    avgProc=round(avgProc/count)
     print("Completed!")
-
-    print("\n",iFile)
+    displayFileName = iFile.replace(".csv","")
+    print("\n %s agent"%(displayFileName))
     print("======================")
-    print(f"Average RSS consumed by all the processes {iFile} agent = ",str(avgMem/count))
-    print(f"Average process spawned in {iFile} agent case = ",str(avgProc/count))
-    print(f"Average RSS used per process {iFile} agent = ",str(avgMem/avgProc))
+    print(f"Average RSS consumed by all the processes {displayFileName} agent = {avgMem} MiB")
+    print(f"Average process spawned in {displayFileName} agent case = ",str(avgProc))
+    print(f"Average RSS used per process {displayFileName} agent = {avgMem/avgProc} MiB")
     print("======================\n")
     return True
 
 def getCSVFile(user: ssh.User,id,oFile):
     print(f"Started copying file from container to {user.ip}...")
     cmd = "docker cp "+id+":/rss/rss_longevity.txt "+oFile
-    # print(cmd)
+
     ssh.doSSH(user,cmd)
     print("Completed!")
+    print("File in {} is {}".format(inspect.stack()[0][3], oFile))
 
     print(f"Started copying file from {user.ip} to local machine...")
-    out = ssh.doSCP(user,oFile,f"/root/{oFile}",False)
-    # print(out)
+    out = ssh.doSCP(user,oFile+".tmp",f"/root/{oFile}",False)
 
-    # data=ssh.doSSH(user,f"cat {oFile}")
-    # if os.path.exists(oFile):
-    #     os.remove(oFile)
-    # f = open(oFile, "w")
-    # # print(data)
-    # f.write(data)
-    # f.close()
     print("Completed!")
     return manageCSV(oFile)
 
 # with
+argv = sys.argv[1:]
+print(argv)
 print(f"*** Make sure VPN is connected ***")
 
 # print(f"\n## WITH AGENT")
@@ -95,12 +102,28 @@ print(f"*** Make sure VPN is connected ***")
 # outWith = threadFiringWith.join()
 # outWithout = threadFiringWithout.join()
 with concurrent.futures.ThreadPoolExecutor() as executor:
-    futureWith = executor.submit(getContainer, WITH_MACHINE, "with.csv")
-    futureWithout = executor.submit(getContainer, WITHOUT_MACHINE, "without.csv")
-    outWith = futureWith.result()
+    futureWithout = executor.submit(getContainer, WITHOUT_MACHINE, FILES[0])
+    futureWithNr = executor.submit(getContainer, WITH_NR_MACHINE, FILES[1])
+    futureWithInt = executor.submit(getContainer, WITH_INT_MACHINE, FILES[2])
     outWithout = futureWithout.result()
+    outWithNr = futureWithNr.result()
+    outWithInt = futureWithNr.result()
+
+# outWith = outWithout = True
 
 print("Data collected successfully!!")
 
-if outWith and outWithout:
-    plot.plotGraph()
+if outWithout and outWithNr and outWithInt:
+    # marking_without = WITHOUT_MACHINE.ip.split('.')[3]
+    # marking_with_nr = WITH_NR_MACHINE.ip.split('.')[3]
+    # marking_with_int = WITH_INT_MACHINE.ip.split('.')[3]
+
+    if len(argv) == 2:
+        # (WITHOUT,WITH_NR,WITH_INT)
+        plot.plotGraph(FILES, "PHP-RSS","Time","RSS","RSS vs Time",'C','F',redLabel=argv[0],blueLabel=argv[1])
+        plot.plotGraph(FILES, "PHP-RSS-per-process","Time","RSS per-process","RSS (per-process) vs Time",'C','G',redLabel=argv[0],blueLabel=argv[1])
+        plot.plotGraph(FILES, "PHP-Process","Time","Process count","Process count vs Time",'C','A',redLabel=argv[0],blueLabel=argv[1])
+    else:
+        plot.plotGraph(FILES, "PHP-RSS","Time","RSS","RSS vs Time",'C','F')
+        plot.plotGraph(FILES, "PHP-RSS-per-process","Time","RSS per-process","RSS (per-process) vs Time",'C','G')
+        plot.plotGraph(FILES, "PHP-Process","Time","Process count","Process count vs Time",'C','A')

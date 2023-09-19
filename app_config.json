@@ -1,0 +1,26 @@
+{
+    "java": {
+       "application": "k2-java-vulnerable-perf",
+       "application_without_agent": "k2-java-vulnerable-perf"
+    },
+    "node": {
+       "application": "syscall_node_v16_with",
+       "application_without_agent": "syscall_node_v16_without"
+    },
+    "ruby": {
+       "application": "syscalls-ruby-unicorn",
+       "application_without_agent": "syscalls-ruby-unicorn"
+    },
+    "php": {
+       "application": "k2-php-vulnerable-perf",
+       "application_without_agent": "k2-php-vulnerable-perf"
+    },
+    "go": {
+       "application": "syscall-go",
+       "application_without_agent": "syscall-go"
+    },
+    "python": {
+       "application": "syscalls_python",
+       "application_without_agent": "syscalls_python"
+    }
+ }
